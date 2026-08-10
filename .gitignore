@@ -1,0 +1,18 @@
+node_modules
+.env
+
+.session
+.wwebjs_auth
+.wwebjs_cache
+
+*.log
+
+# Runtime state / local storage
+engagement.json
+messageStore.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

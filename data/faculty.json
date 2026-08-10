@@ -1,0 +1,29 @@
+{
+  "faculty_overview": "Faculty includes Ivy League professors, global business school academicians, and industry leaders such as CEOs, CTOs, and managing directors.",
+
+  "top_institutions": [
+    "Harvard University",
+    "MIT Sloan",
+    "Stanford Business School",
+    "Wharton School",
+    "Columbia Business School",
+    "INSEAD",
+    "Oxford Saïd Business School"
+  ],
+
+  "industry_experts": [
+    "CEOs & CTOs from global companies",
+    "Managing directors from multinational corporations",
+    "Venture capital partners",
+    "Senior executives from Fortune 500 firms"
+  ],
+
+  "mentorship_support": [
+    "Career coaching & interview preparation",
+    "Domain mentorship",
+    "Startup coaching & funding guidance",
+    "1:1 mentorship sessions"
+  ],
+
+  "mentor_network": "100+ mentors across industries worldwide"
+}

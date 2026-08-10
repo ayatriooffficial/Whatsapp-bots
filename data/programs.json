@@ -1,0 +1,143 @@
+{
+  "programs": [
+    {
+      "id": "mba",
+      "name": "Master of Business Administration (MBA)",
+      "duration": "2 Years",
+      "format": "Full Time",
+      "start_date": "September 2026",
+      "eligibility": "Bachelor's Degree",
+
+      "fees": {
+        "emi_start": "₹5,555/month",
+        "emi_duration": "8 months",
+        "no_cost_emi": "12, 18, 24, 36 months available",
+        "success_fee": "₹19,999 – ₹39,999",
+        "scholarship": "Up to ₹16,000",
+        "seat_booking": "₹2000"
+      },
+
+      "placement": {
+        "placement_rate": "95%",
+        "average_ctc": "26.5 LPA",
+        "salary_range": "16 – 42 LPA",
+        "salary_growth": "3.05x jump"
+      },
+
+      "placement_support": [
+        "Resume building",
+        "Mock interviews",
+        "Career coaching",
+        "Placement drives & recruiter access"
+      ],
+
+      "global_exposure": [
+        "United States",
+        "Singapore",
+        "Dubai",
+        "Europe",
+        "Argentina"
+      ],
+
+      "career_roles": [
+        "Business Manager",
+        "Strategy Consultant",
+        "Operations Director",
+        "Entrepreneur"
+      ]
+    },
+
+    {
+      "id": "pgdm",
+      "name": "Post Graduate Diploma in Management (PGDM)",
+      "duration": "2 Years",
+      "format": "Full Time",
+      "start_date": "September 2026",
+      "eligibility": "Bachelor's Degree",
+
+      "fees": {
+        "emi_start": "₹5,555/month",
+        "emi_duration": "8 months",
+        "no_cost_emi": "12, 18, 24, 36 months available",
+        "success_fee": "₹19,999 – ₹39,999",
+        "scholarship": "Up to ₹16,000",
+        "seat_booking": "₹2000"
+      },
+
+      "placement": {
+        "placement_rate": "92%",
+        "average_ctc": "24.5 LPA",
+        "salary_range": "15 – 40 LPA",
+        "salary_growth": "2.5x hike"
+      },
+
+      "placement_support": [
+        "100% placement assistance",
+        "Industry mentorship",
+        "Career guidance",
+        "Placement drives"
+      ],
+
+      "global_exposure": [
+        "Singapore",
+        "Malaysia",
+        "Dubai",
+        "United States",
+        "Europe"
+      ],
+
+      "career_roles": [
+        "Management Trainee",
+        "Project Manager",
+        "Operations Manager",
+        "Marketing Manager"
+      ]
+    },
+
+    {
+      "id": "executive",
+      "name": "Executive MBA (Product Growth Engineering)",
+      "duration": "18 Months",
+      "format": "Weekend Classes + Online",
+      "start_date": "January 2026",
+      "eligibility": "Minimum 3+ years work experience",
+
+      "fees": {
+        "emi_start": "₹5,555/month",
+        "emi_duration": "8 months",
+        "no_cost_emi": "12, 18, 24, 36 months available",
+        "success_fee": "₹19,999 – ₹39,999",
+        "scholarship": "Up to ₹16,000",
+        "seat_booking": "₹2000"
+      },
+
+      "career_growth": {
+        "promotion_rate": "98%",
+        "average_ctc": "38.5 LPA",
+        "salary_range": "28 – 65 LPA",
+        "salary_growth": "1.8x increase"
+      },
+
+      "features": [
+        "Weekend classes for working professionals",
+        "CXO mentorship & executive networking",
+        "Continue job while studying",
+        "Strategic leadership training"
+      ],
+
+      "global_exposure": [
+        "United States",
+        "Dubai",
+        "Singapore",
+        "Europe"
+      ],
+
+      "career_roles": [
+        "Senior Manager",
+        "Director",
+        "Vice President",
+        "C-Suite Leadership"
+      ]
+    }
+  ]
+}

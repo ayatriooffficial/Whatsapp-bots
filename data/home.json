@@ -1,0 +1,18 @@
+{
+  "placement_highlights": {
+    "highest_ctc": "₹12.30 LPA",
+    "average_ctc": "₹5.66 LPA",
+    "top_25_percent": "₹8.52 LPA",
+    "placement_distribution": {
+      "indian_startups": "72%",
+      "gulf_asian_mncs": "25%",
+      "usa_mncs": "3%"
+    },
+    "recruiters": "1500+"
+  },
+  "global_curriculum": true,
+  "experiential_learning": true,
+  "ai_curriculum": true,
+  "creator_challenge": true,
+  "career_labs": true
+}
