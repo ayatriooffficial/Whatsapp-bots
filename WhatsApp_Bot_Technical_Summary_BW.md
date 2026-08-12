@@ -1,21 +1,21 @@
-# Technical Summary: WhatsApp Bot — 3-Tab Sheet + Gemini + Anti-Ban Upgrade
+# Technical Summary: WhatsApp Bot — 3-Day × 2-Slot Scheduled Campaign
 
 _Date: Aug 2026_
 
-This document summarizes the **post-upgrade** state of the WhatsApp bot. It replaces the earlier May 1–20 summary.
+This document summarizes the current state of the WhatsApp bot: **3-day × 2-slot scheduled campaigns**, permanent CBA/DGM lead lists, Excel-driven message schedule, Gemini AI, and anti-ban hardening.
 
 ---
 
 ## Executive Summary
 
-The bot was upgraded from a single-tab, Groq-powered sender to a **3-tab Google Sheet architecture with Gemini AI, Excel-driven messages, and anti-ban hardening**:
+The bot now runs a **structured 3-day campaign per lead** (2 messages/day at custom times = 6 total, all different), with:
 
-- **3-tab sheet**: `cookie_import` (master, unchanged) → bot auto-splits into **CBA / DGM / TBM** tabs; a **Messages** tab drives what the bot sends (editable in Excel, no code change).
-- **AI provider**: Switched from **Groq (llama-3.1-8b-instant)** to **Gemini (`gemini-3.1-flash-lite`)** — same endpoint pattern as the website backend's blog generator.
-- **Message source**: **Messages tab is primary** (template with `{name}`/`{course}`/`{score}` placeholders); Gemini AI is the fallback when no template matches.
-- **Volume/timing**: 1-minute randomized delays (45–75s), configurable daily cap (default 150) + 3-day warm-up, shuffled lead order.
-- **Anti-ban**: added stealth Puppeteer flags, realistic user-agent, non-headless default, randomized timing, opt-out compliance.
-- **Critical bug fixes**: wrong sheet tab name (`"Users"` → `cookie_import`), wrong phone column (E → D), wrong score column (G → J).
+- **Permanent CBA / DGM lead tabs** — DB leads auto-added from `cookie_import`, manual leads typed directly by workers, progress columns (Stage / Day / Slot / Status / Messages Sent / Last Sent At), and **auto-removal when done** (after all 6 messages).
+- **Messages tab = schedule** — `Course | Day | Slot | Time | Score From | Score To | Content`; 6 slots per course, each with its own custom time; edit in Excel → bot sends it at that time (no code change).
+- **AI provider**: **Gemini (`gemini-3.1-flash-lite`)** — fallback when no template matches.
+- **Time-based scheduler** — checks every minute, sends when a slot time is due; respects per-user (2/day) + global daily caps; 1-min randomized delays.
+- **Anti-ban**: stealth Puppeteer flags, realistic UA, non-headless default, randomized timing, opt-out compliance, daily caps.
+- **Critical bug fixes**: wrong sheet tab (`"Users"` → `cookie_import`), wrong phone column (E → D), wrong score column (G → J).
 
 ---
 
@@ -24,19 +24,18 @@ The bot was upgraded from a single-tab, Groq-powered sender to a **3-tab Google 
 | File | Status | Change |
 |---|---|---|
 | `services/courseCategories.js` | **NEW** | Maps course strings → CBA/DGM/TBM tabs |
-| `services/sheetSplitter.js` | **NEW** | Reads `cookie_import`, clears + rebuilds CBA/DGM/TBM; seeds Messages header |
-| `services/messageTemplates.js` | **NEW** | Reads Messages tab; resolves most-specific template (course+session+score); placeholders |
-| `services/sheetService.js` | Rewritten | Shared `loadSheet(title)` (auto-creates tabs); correct columns (Phone=D/3, Course=E/4, Score=J/9, Sent=P/15) |
-| `services/aiReply.js` | Rewritten | Groq → Gemini (`gemini-3.1-flash-lite`); keeps rate-limit guard + fallback |
-| `services/contentAgent.js` | Modified | Template-first in `generateIntroContent`/`generateFollowupContent`; AI fallback |
-| `campaign.js` | Rewritten | TEST_MODE filter, 1-min randomized delay, daily cap + warm-up, shuffle, course+score into generation |
-| `scheduler.js` | Modified | Env-configurable anti-spam; template/AI followups; removed legacy hardcoded builders |
+| `services/sheetSplitter.js` | Rewritten | **Append-only CBA/DGM master lists**; auto-add DB leads; preserve manual rows + dividers; remove done leads; migrate headers |
+| `services/messageTemplates.js` | Rewritten | **Day/Slot/Time schedule** matching; old-format migration; placeholders |
+| `services/sheetService.js` | Modified | `getCourseLeads` + `updateLeadProgress` for course tabs; correct columns |
+| `services/aiReply.js` | Rewritten | Groq → Gemini (`gemini-3.1-flash-lite`); rate-limit guard + fallback |
+| `services/beautifySheet.js` | **NEW** | Formats Messages tab (frozen/colored header, autosize) + seeds 12 example rows |
+| `scheduler.js` | Rewritten | **Time-based 3-day × 2-slot sends**; day/slot progression; progress updates; done-after-6 |
+| `campaign.js` | Unused | Kept as reference; no longer imported (scheduler owns sends) |
 | `bot.js` | Modified | Added 12+ stealth Puppeteer flags + realistic Chrome user-agent |
-| `server.js` | Modified | Wired `syncCourseTabs` on boot + every 15 min; `splitSyncTimer` lifecycle |
-| `leadLoader.js` | Modified | Aligned to correct columns (Phone=D/3); reads A1:K50 |
-| `.env` | **NEW** | All config: sheet creds, Gemini key, volume/timing, TEST_MODE |
-| `README.md` | **NEW** | Setup + Messages-tab docs |
-| `GUIDE.md` | **NEW** | Complete from-zero guide: links, link/unlink phone, commands, troubleshooting |
+| `server.js` | Modified | Removed campaign blast; wired splitter + scheduler only |
+| `leadLoader.js` | Rewritten | Loads from CBA/DGM course tabs (progress-aware) |
+| `.env` | Modified | Schedule config: `SLOT1_TIME`, `SLOT2_TIME`, `TOTAL_SESSIONS`, `MAX_MESSAGES_PER_DAY` |
+| `README.md` / `GUIDE.md` | Updated | New schedule docs |
 
 ---
 
@@ -45,37 +44,44 @@ The bot was upgraded from a single-tab, Groq-powered sender to a **3-tab Google 
 ```
 Google Sheet (single spreadsheet)
  ├── cookie_import   ← MASTER: website exports ALL users here (unchanged)
- ├── CBA             ← derived: bot copies CMP / Certified Management Professional users
- ├── DGM             ← derived: bot copies Digital Growth Marketing users
- ├── TBM             ← derived: bot copies TBM users
- └── Messages        ← message content the bot sends (editable in Excel!)
+ ├── CBA             ← PERMANENT: CMP leads + progress; DB auto-added, manual added
+ ├── DGM             ← PERMANENT: Digital Growth leads + progress; DB auto-added, manual added
+ ├── TBM             ← PERMANENT (future): TBM leads
+ ├── Messages        ← SCHEDULE: Course|Day|Slot|Time|Score|Score|Content (editable in Excel!)
+ └── Manual Leads    ← temporary holding for manual entries (copied to CBA/DGM)
 ```
 
 - Website still writes only to `cookie_import` — **no changes to admin/client repos**.
-- Bot syncs CBA/DGM/TBM every `SPLIT_SYNC_INTERVAL_MS` (default 15 min): **clear + rebuild** (deletions in master propagate).
+- Bot appends new DB users to CBA/DGM (dedupe by phone) every `SPLIT_SYNC_INTERVAL_MS` (15 min).
+- **Done leads (6 messages sent) are removed** from CBA/DGM; manual + DB leads both flow through the same schedule.
+- Divider rows (e.g. `— CBA LEADS —`) are preserved for worker readability.
 - Messages tab is **never wiped**; bot reads it with a 2-min cache.
 
 ---
 
-## Messages Tab Format
+## Messages Tab Format (schedule)
 
 ```
-Course | Session | Score From | Score To | Content
+Course | Day | Slot | Time | Score From | Score To | Content
 ```
 
 - Course: `CBA` / `DGM` / `TBM` / `ALL`
-- Session: `1` / `2` / `3` / `ALL`
+- Day: `1` / `2` / `3` / `ALL`
+- Slot: `1` / `2` / `ALL`
+- Time: `HH:MM` (24h) — when to send that day; fallback `10:00` (slot 1) / `18:00` (slot 2)
 - Score From/To: viewer-score range (inclusive); blank = any
 - Content: message text with `{name}` / `{course}` / `{score}` placeholders
 
-Resolution: course+session+score → course+session → course → ALL → **Gemini AI fallback**.
+**Schedule per lead:** 3 days × 2 slots = 6 messages (all can differ); after the 6th, `Stage=done` → removed from CBA/DGM.
+
+Resolution: course+day+slot+score → course+day+slot → course → ALL → **Gemini AI fallback**.
 
 ---
 
 ## Anti-ban measures (honest)
 
-- Randomized 45–75s delays, daily cap + warm-up ramp, shuffled lead order
-- Stealth Puppeteer flags, realistic UA, non-headless default
+- 2 messages/day per user max, global daily cap (default 150), 1-min randomized delays (45–75s)
+- Time-based sends (no rapid blasts), stealth Puppeteer flags, realistic UA, non-headless default
 - Opt-out compliance ("stop"/"unsubscribe")
 - **Caveat**: whatsapp-web.js is unofficial — Meta can still ban the sender number. The only fully-safe path is the official WhatsApp Business Cloud API (future work).
 
@@ -84,8 +90,11 @@ Resolution: course+session+score → course+session → course → ALL → **Gem
 ## Verification (completed)
 
 - Sheet connectivity with `charters-sheets` service account: ✅
-- Tab creation: CBA (7 rows), DGM (4), TBM (0, header), Messages (header) ✅
-- Template resolution unit test: ✅ (CBA+session+score → specific; DGM → ALL fallback; no-match → null)
+- Messages tab migrated to day/slot/time + beautified (frozen/colored header) + 12 example rows seeded ✅
+- CBA/DGM headers migrated to progress format (Stage/Day/Slot/Status/Sent/LastSent/AddedBy); existing rows normalized ✅
+- Course-tab leads read correctly (CBA 6, DGM 4 active) ✅
+- Template matching by course classification: CBA d1s1 → 10:00, CBA d3s2 → 18:00, DGM d2s1 → 10:00, TBM → AI fallback ✅
+- Day/slot progression: 6 messages → day1s1, day1s2, day2s1, day2s2, day3s1, day3s2 → done ✅
 - Gemini key + model (`gemini-3.1-flash-lite`) live test: ✅
 - End-to-end: test lead (om) received poster + Excel template message ✅
 
@@ -96,12 +105,13 @@ Resolution: course+session+score → course+session → course → ALL → **Gem
 | Variable | Default | Purpose |
 |---|---|---|
 | `TEST_MODE` / `TEST_PHONE` | `false` / — | `true` = only send to one test number |
-| `SEND_INTERVAL_MS` / `SEND_INTERVAL_JITTER_MS` | 60000 / 15000 | 1-min randomized delay |
-| `MAX_DAILY_MESSAGES` | 150 | Daily cap (after warm-up) |
-| `WARMUP_DAYS` / `WARMUP_DAILY_MAX` | 3 / 50 | Warm-up ramp |
-| `MIN_HOURS_BETWEEN` / `MAX_MESSAGES_PER_DAY` | 10 / 5 | Per-user anti-spam |
-| `SPLIT_SYNC_INTERVAL_MS` | 900000 | CBA/DGM/TBM rebuild interval |
-| `LEAD_LOAD_ROWS` | 50 | Rows of cookie_import loaded into store |
+| `SEND_INTERVAL_MS` / `SEND_INTERVAL_JITTER_MS` | 60000 / 15000 | 1-min randomized delay between sends |
+| `MAX_DAILY_MESSAGES` | 150 | Global daily cap across all leads |
+| `MAX_MESSAGES_PER_DAY` | 2 | Per-user daily cap (2 = the 2 slots) |
+| `TOTAL_SESSIONS` | 6 | Total messages per lead (3 days × 2 slots) |
+| `SLOT1_TIME` / `SLOT2_TIME` | 10:00 / 18:00 | Fallback slot times (Messages tab Time overrides) |
+| `SPLIT_SYNC_INTERVAL_MS` | 900000 | How often CBA/DGM tabs sync new DB leads (15 min) |
+| `LEAD_LOAD_ROWS` | 50 | Rows of course tabs loaded into store |
 | `GEMINI_MODEL` | gemini-3.1-flash-lite | AI model |
 | `AI_MAX_REQ_PER_MIN` | 25 | Gemini rate-limit guard |
 

@@ -117,26 +117,29 @@ npm start
 | Tab | Purpose | Who writes |
 |---|---|---|
 | `cookie_import` | Master list of all users (from the website) | Website backend (every 10 min) |
-| `CBA` | CBA (Certified Management Professional) leads | Bot (auto, every 15 min) |
-| `DGM` | DGM (Digital Growth Marketing) leads | Bot (auto, every 15 min) |
-| `TBM` | TBM leads | Bot (auto, every 15 min) |
-| `Messages` | **Message templates the bot sends** | **You (edit in Excel!)** |
+| `CBA` | **Permanent CBA lead list + progress** | Bot appends new DB leads; workers add manual leads |
+| `DGM` | **Permanent DGM lead list + progress** | Bot appends new DB leads; workers add manual leads |
+| `TBM` | Permanent TBM lead list (future) | Bot |
+| `Messages` | **Message schedule the bot sends** (3 days × 2 slots) | **You (edit in Excel!)** |
+| `Manual Leads` | Temporary holding for manual entries (copied into CBA/DGM) | You |
 
-> CBA/DGM/TBM are **rebuilt** each sync (they mirror `cookie_import`). `Messages` is **never wiped** — your edits persist.
+> CBA/DGM are **permanent** — leads stay until all 6 messages are sent, then the bot removes them. Divider rows (like `— CBA LEADS —`) help workers see sections at a glance; they're preserved.
 
 ---
 
-## 7. The Messages tab — how to control what the bot sends
+## 7. The Messages tab — the 3-day × 2-slot schedule
 
 **Columns (header row):**
 ```
-Course | Session | Score From | Score To | Content
+Course | Day | Slot | Time | Score From | Score To | Content
 ```
 
 | Column | Meaning | Example |
 |---|---|---|
 | `Course` | Which course: `CBA`, `DGM`, `TBM`, or `ALL` | `CBA` |
-| `Session` | Which message (1st, 2nd, 3rd follow-up) | `1` |
+| `Day` | Which day of the campaign (1, 2, or 3) | `1` |
+| `Slot` | Which slot that day (1 or 2) | `1` |
+| `Time` | When to send (24h `HH:MM`) | `10:00` |
 | `Score From` | Min viewer score (blank = any) | `70` |
 | `Score To` | Max viewer score (blank = any) | `100` |
 | `Content` | The message text | `Hi {name}! ...` |
@@ -146,26 +149,53 @@ Course | Session | Score From | Score To | Content
 - `{course}` → lead's course string
 - `{score}` → lead's viewer score
 
-**Example rows:**
+**The schedule per lead = 3 days × 2 slots = 6 messages:**
 ```
-CBA  | 1 |    |    | Hi {name}! The CBA program is filling fast. Reply YES.
-CBA  | 1 | 70 | 100 | {name}, you've been exploring {course} a lot — ready to apply?
-DGM  | 2 |    |    | {name}, here's a Digital Growth follow-up...
-ALL  | 1 |    |    | Hi {name}! Admissions open at Charters Union of Business.
+Day 1: slot 1 (e.g. 10:00) + slot 2 (e.g. 18:00)
+Day 2: slot 1 (e.g. 10:00) + slot 2 (e.g. 18:00)
+Day 3: slot 1 (e.g. 10:00) + slot 2 (e.g. 18:00)
+→ after 6th message, lead is "done" and removed
+```
+
+**Example rows (already seeded by the beautifier):**
+```
+CBA | 1 | 1 | 10:00 | | | Hi {name}! Day 1 morning — CBA programs are open. Reply YES to learn more.
+CBA | 1 | 2 | 18:00 | | | {name}, here's what CBA graduates achieve. Want details?
+CBA | 2 | 1 | 10:00 | | | Good morning {name}! Placement outcomes for CBA — check this.
+CBA | 2 | 2 | 18:00 | | | {name}, fees & EMI options for CBA — affordable plans available.
+CBA | 3 | 1 | 10:00 | | | {name}, final batch reminder — CBA seats filling up.
+CBA | 3 | 2 | 18:00 | | | {name}, last chance! Apply for CBA now.
 ```
 
 **How matching works** (most specific wins):
-1. Course + Session + Score range
-2. Course + Session
-3. Course only
-4. `ALL` (any course)
-5. **No match → Gemini AI generates the message**
+1. Course + Day + Slot + Score range
+2. Course + Day + Slot
+3. Course only / `ALL`
+4. **No match → Gemini AI generates the message**
 
-> **Edit a message in Excel → the bot sends it on the next message. No code change, no restart needed** (2-min cache).
+> **Edit a message in Excel → the bot sends it at that slot time. No code change, no restart** (2-min cache).
+
+**Custom times:** set any `Time` per row (e.g. `11:30`, `19:00`). If a slot has no Time, defaults are `10:00` (slot 1) and `18:00` (slot 2). You can do afternoon-both or morning+evening — whatever you set.
 
 ---
 
-## 8. Testing mode (safe — send only to one number)
+## 8. Adding manual leads
+
+**Option A — direct into CBA/DGM tab (recommended):**
+1. Open the `CBA` or `DGM` tab
+2. Add a row: Name | Email | Phone | Course | (leave progress columns as `pending / 1 / 1 / active / 0`)
+3. The bot picks it up on the next cycle (up to ~15 min)
+
+**Option B — via Manual Leads tab:**
+1. Open `Manual Leads` tab
+2. Add: Name | Email | Phone | Course
+3. The splitter copies it into CBA/DGM automatically (deduped by phone)
+
+> Manual leads work exactly like DB leads: same 3-day × 2-slot schedule, same Messages-tab templates, removed after done.
+
+---
+
+## 9. Testing mode (safe — send only to one number)
 
 In `.env`:
 ```env
@@ -183,7 +213,7 @@ To test the Excel-message flow:
 
 ---
 
-## 9. Volume / anti-spam / anti-ban
+## 10. Volume / anti-spam / anti-ban
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -199,7 +229,7 @@ To test the Excel-message flow:
 
 ---
 
-## 10. Common tasks
+## 11. Common tasks
 
 | Task | Command / Action |
 |---|---|
@@ -215,7 +245,7 @@ To test the Excel-message flow:
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -231,7 +261,7 @@ To test the Excel-message flow:
 
 ---
 
-## 12. Deployment (cloud)
+## 13. Deployment (cloud)
 
 - The bot is **not yet deployed** — it runs locally.
 - To deploy on Render/VPS: push this folder, set the same `.env` values as env vars, run `npm start`, and **scan the QR once on the server** (headless with a VNC/display, or `HEADLESS=false` on a GUI box).

@@ -1,35 +1,38 @@
 /**
  * Message template service — reads the "Messages" tab from Google Sheets.
  *
- * Tab layout (row 1 = header, must contain these columns):
- *   Course | Session | Score From | Score To | Content
+ * Tab layout (row 1 = header):
+ *   Course | Day | Slot | Time | Score From | Score To | Content
  *
  * - Course: "CBA", "DGM", "TBM", or "ALL" (case-insensitive)
- * - Session: 1, 2, 3, or "ALL"
+ * - Day: 1, 2, 3 or "ALL"
+ * - Slot: 1, 2 or "ALL"
+ * - Time: HH:MM (24h) — when this message is sent on that day
  * - Score From / Score To: viewer-score range (inclusive), blank = any
- * - Content: the WhatsApp message text, may use placeholders:
- *     {name}   -> lead's first name
- *     {course} -> lead's course string
- *     {score}  -> viewer score
+ * - Content: the message, with {name} / {course} / {score} placeholders
  *
- * Resolution order: exact course+session+score match → course+session →
- * course only → ALL (any course) → null (caller falls back to AI).
- * Results are cached briefly to avoid hammering the Sheets API.
+ * Resolution: exact course+day+slot+score → course+day+slot → course → ALL
+ * → null (caller falls back to AI). Results cached 2 min.
  */
 
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const CACHE_TTL_MS = 2 * 60 * 1000;
 
-let cache = { at: 0, rows: null, courseOptions: null, error: null };
+const { classifyCourse } = require("./courseCategories");
 
-function resolveSheet(loadSheet) {
-  return loadSheet("Messages");
-}
+const HEADERS = [
+  "Course",
+  "Day",
+  "Slot",
+  "Time",
+  "Score From",
+  "Score To",
+  "Content",
+];
+
+let cache = { at: 0, rows: null };
 
 function fillPlaceholders(text, lead) {
-  const firstName = String(lead.name || "there")
-    .trim()
-    .split(" ")[0];
-
+  const firstName = String(lead.name || "there").trim().split(" ")[0];
   return String(text || "")
     .replace(/\{name\}/g, firstName)
     .replace(/\{course\}/g, String(lead.course || ""))
@@ -43,96 +46,140 @@ function scoreInRange(score, from, to) {
   return s >= lo && s <= hi;
 }
 
-function rowMatches(row, lead) {
-  const courseMatch = (course, leadCourse) => {
-    const c = String(course || "").trim().toLowerCase();
-    const lc = String(leadCourse || "").trim().toLowerCase();
-    if (!c || c === "all") return true;
-    if (c === "cba") return lc.includes("cmp") || lc.includes("management professional") || lc.includes("certified management");
-    if (c === "dgm") return lc.includes("digital growth") || lc.includes("digital marketing") || lc.includes("growth marketing");
-    if (c === "tbm") return lc.includes("tbm") || lc.includes("technology & business") || lc.includes("technology and business") || lc.includes("business management");
-    return lc.includes(c);
-  };
-
-  const sessionMatch = (sess, leadSession) => {
-    const s = String(sess || "").trim().toLowerCase();
-    return !s || s === "all" || Number(s) === Number(leadSession || 1);
-  };
-
-  const scoreMatch = (from, to) => scoreInRange(lead.score, from, to);
-
-  return (
-    courseMatch(row.course, lead.course) &&
-    sessionMatch(row.session, lead.session) &&
-    scoreMatch(row.scoreFrom, row.scoreTo)
-  );
+function timeToMinutes(t) {
+  const [h, m] = String(t || "10:00").split(":").map(Number);
+  return (Number.isFinite(h) ? h : 10) * 60 + (Number.isFinite(m) ? m : 0);
 }
 
 /**
- * Returns { content, source } or null.
- * `source` is the tab+row for debugging.
+ * Seeds the Messages header (new format) or migrates the old
+ * Course|Session|Score From|Score To|Content layout to the new one
+ * (day=session, slot=1, time=10:00). Idempotent.
  */
-async function resolveTemplate(loadSheet, lead) {
-  const now = Date.now();
-  if (cache.at && now - cache.at < CACHE_TTL_MS && cache.rows) {
-    return pickBest(lead, cache.rows);
+async function migrateMessagesTab(loadSheet) {
+  const sheet = await loadSheet("Messages");
+  await sheet.loadCells("A1:G1");
+  const a1 = sheet.getCell(0, 0).value;
+
+  if (!a1) {
+    // Empty tab — seed new header
+    for (let c = 0; c < HEADERS.length; c++) sheet.getCell(0, c).value = HEADERS[c];
+    await sheet.saveUpdatedCells();
+    console.log("   ↳ Messages: seeded new header (Course|Day|Slot|Time|Score|Score|Content)");
+    return;
   }
 
-  try {
-    const sheet = await resolveSheet(loadSheet);
+  const c1 = sheet.getCell(0, 2).value;
+  if (String(c1 || "").trim().toLowerCase() === "score from") {
+    // OLD format — migrate: Course|Session|ScoreFrom|ScoreTo|Content
+    //              → Course|Day|Slot|Time|ScoreFrom|ScoreTo|Content
+    console.log("   ↳ Messages: migrating old session format → day/slot/time");
     const rows = await sheet.getRows();
+    const migrated = rows.map((r) => {
+      const raw = r._rawData || [];
+      return [
+        String(raw[0] ?? ""),
+        String(raw[1] ?? ""), // session → day
+        "1",                  // slot = 1
+        "10:00",              // default time
+        String(raw[2] ?? ""),
+        String(raw[3] ?? ""),
+        String(raw[4] ?? ""),
+      ];
+    });
 
-    const parsed = rows
-      .map((row) => {
-        const raw = row._rawData || [];
-        return {
-          course: raw[0],
-          session: raw[1],
-          scoreFrom: String(raw[2] ?? "").trim(),
-          scoreTo: String(raw[3] ?? "").trim(),
-          content: raw[4],
-        };
-      })
-      .filter((r) => r.content && String(r.content).trim().length > 5);
-
-    cache = { at: now, rows: parsed, courseOptions: null, error: null };
-    return pickBest(lead, parsed);
-  } catch (err) {
-    console.log("Message templates unavailable:", err.message);
-    cache = { at: now, rows: null, courseOptions: null, error: err.message };
-    return null;
+    await sheet.clear();
+    await sheet.loadCells("A1:G1");
+    for (let c = 0; c < HEADERS.length; c++) sheet.getCell(0, c).value = HEADERS[c];
+    await sheet.saveUpdatedCells();
+    for (const r of migrated) await sheet.addRow(r);
+    console.log(`   ↳ Migrated ${migrated.length} old rows to day/slot/time`);
   }
 }
 
+async function readRows(loadSheet) {
+  const sheet = await loadSheet("Messages");
+  const rows = await sheet.getRows();
+  return rows
+    .map((row) => {
+      const raw = row._rawData || [];
+      return {
+        course: String(raw[0] ?? "").trim(),
+        day: String(raw[1] ?? "").trim(),
+        slot: String(raw[2] ?? "").trim(),
+        time: String(raw[3] ?? "").trim(),
+        scoreFrom: String(raw[4] ?? "").trim(),
+        scoreTo: String(raw[5] ?? "").trim(),
+        content: String(raw[6] ?? ""),
+      };
+    })
+    .filter((r) => r.content && r.content.trim().length > 5);
+}
+
 /**
- * Pick the most specific matching template:
- * 1. course+session+score  2. course+session  3. course  4. ALL
+ * Resolves the message + time for a (course, day, slot, score) combination.
+ * Returns { content, time, source } or null → caller falls back to AI.
  */
-function pickBest(lead, rows) {
-  const matches = rows.filter((r) => rowMatches(r, lead));
+async function resolveSlotTemplate(loadSheet, opts = {}) {
+  const { course = "", day = 1, slot = 1, score = 0, name = "there" } = opts;
+  await migrateMessagesTab(loadSheet);
+
+  const now = Date.now();
+  if (!cache.at || now - cache.at > CACHE_TTL_MS) {
+    try {
+      cache = { at: now, rows: await readRows(loadSheet) };
+    } catch (err) {
+      console.log("Message templates unavailable:", err.message);
+      return null;
+    }
+  }
+
+  const c = String(course || "").toLowerCase().trim();
+  const dayS = String(day);
+  const slotS = String(slot);
+  const leadTab = classifyCourse(course) || ""; // CBA/DGM/TBM from the lead's full course string
+
+  const matches = (cache.rows || []).filter((r) => {
+    const rc = String(r.course || "").toLowerCase().trim();
+    const rd = String(r.day || "").toLowerCase().trim();
+    const rs = String(r.slot || "").toLowerCase().trim();
+
+    // Course match: template uses tab code (CBA/DGM) OR a substring of the lead's course
+    const courseOk =
+      rc === "all" ||
+      rc === leadTab.toLowerCase() ||
+      (c && c.includes(rc)) ||
+      (rc && String(course || "").toLowerCase().includes(rc));
+
+    if (!courseOk) return false;
+    if (!(rd === "all" || rd === dayS)) return false;
+    if (!(rs === "all" || rs === slotS)) return false;
+    return scoreInRange(score, r.scoreFrom, r.scoreTo);
+  });
+
   if (!matches.length) return null;
 
   const specificity = (r) => {
-    const course = String(r.course || "").toLowerCase();
-    const session = String(r.session || "").toLowerCase();
-    const hasScore = r.scoreFrom !== "" || r.scoreTo !== "";
-    let score = 0;
-    if (course && course !== "all") score += 4;
-    if (session && session !== "all") score += 2;
-    if (hasScore) score += 1;
-    return score;
+    let s = 0;
+    if (String(r.course || "").toLowerCase() !== "all") s += 4;
+    if (String(r.day || "").toLowerCase() !== "all") s += 2;
+    if (String(r.slot || "").toLowerCase() !== "all") s += 1;
+    if (r.scoreFrom !== "" || r.scoreTo !== "") s += 1;
+    return s;
   };
 
   matches.sort((a, b) => specificity(b) - specificity(a));
   const best = matches[0];
+
   return {
-    content: fillPlaceholders(best.content, lead),
-    source: `Messages tab (course=${best.course}, session=${best.session}, score=${best.scoreFrom}-${best.scoreTo})`,
+    content: fillPlaceholders(best.content, { name, course, score }),
+    time: String(best.time || "").trim() || (Number(slot) === 2 ? "18:00" : "10:00"),
+    source: `Messages tab (course=${best.course}, day=${best.day}, slot=${best.slot})`,
   };
 }
 
 function invalidateCache() {
-  cache = { at: 0, rows: null, courseOptions: null, error: null };
+  cache = { at: 0, rows: null };
 }
 
-module.exports = { resolveTemplate, invalidateCache };
+module.exports = { resolveSlotTemplate, migrateMessagesTab, invalidateCache, timeToMinutes, fillPlaceholders };

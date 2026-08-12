@@ -8,7 +8,6 @@ const qrcodeTerminal = require("qrcode-terminal");
 const client = require("./bot");
 
 const tracker = require("./services/engagementTracker");
-const { sendBulk } = require("./campaign");
 const store = require("./services/messageStore");
 
 const replyEngine = require("./replyEngine");
@@ -28,7 +27,6 @@ const SPLIT_SYNC_INTERVAL_MS =
 
 let runtimeStarted = false;
 let messageHandlerRegistered = false; // ← prevents double registration
-let leadPollTimer = null;
 let splitSyncTimer = null;
 let initializingClient = false;
 let reconnectTimer = null;
@@ -136,10 +134,6 @@ function setStatus(status) {
 
 function stopRuntimeTasks() {
   runtimeStarted = false;
-  if (leadPollTimer) {
-    clearInterval(leadPollTimer);
-    leadPollTimer = null;
-  }
   if (splitSyncTimer) {
     clearInterval(splitSyncTimer);
     splitSyncTimer = null;
@@ -432,13 +426,8 @@ async function startServer() {
         );
       }, SPLIT_SYNC_INTERVAL_MS);
 
-      console.log("Starting campaign...");
-      sendBulk().catch(err => console.log("Campaign error:", err.message));
-
-      leadPollTimer = setInterval(() => {
-        console.log("Checking new leads...");
-        sendBulk().catch(err => console.log("Campaign poll error:", err.message));
-      }, 180000);
+      // Campaign sends are handled by the scheduler (startReminder)
+      console.log("Campaign scheduler active — sends happen at configured slot times");
     } catch (err) {
       console.log("Runtime start error:", err.message);
     }
