@@ -260,7 +260,7 @@ async function addNewLead(phone, name = "") {
 /* =========================================================
    COURSE-TAB LEADS (CBA/DGM/TBM) — permanent master lists
    Header: User ID|Name|Email|Phone|Course|Stage|Day|Slot|Status|
-           Messages Sent|Last Sent At|Added By
+           Messages Sent|Last Sent At|Added By|Sent Today
 ========================================================= */
 
 const COURSE_COL = {
@@ -276,6 +276,7 @@ const COURSE_COL = {
   SENT_COUNT: 9,
   LAST_SENT_AT: 10,
   ADDED_BY: 11,
+  SENT_TODAY: 12,
 };
 
 function isDividerRow(row) {
@@ -311,6 +312,7 @@ async function getCourseLeads(tabName) {
         messagesSent: Number(raw[COURSE_COL.SENT_COUNT] || 0),
         lastSentAt: String(raw[COURSE_COL.LAST_SENT_AT] ?? ""),
         addedBy: String(raw[COURSE_COL.ADDED_BY] ?? ""),
+        sentToday: Number(raw[COURSE_COL.SENT_TODAY] || 0),
         score: 0,
       };
     })
@@ -338,6 +340,7 @@ async function updateLeadProgress(lead, updates) {
     if (updates.status !== undefined) raw[COURSE_COL.STATUS] = updates.status;
     if (updates.messagesSent !== undefined) raw[COURSE_COL.SENT_COUNT] = String(updates.messagesSent);
     if (updates.lastSentAt !== undefined) raw[COURSE_COL.LAST_SENT_AT] = updates.lastSentAt;
+    if (updates.sentToday !== undefined) raw[COURSE_COL.SENT_TODAY] = String(updates.sentToday);
     await lead.row.save();
   } catch (err) {
     console.log("updateLeadProgress error:", err.message);

@@ -77,18 +77,26 @@ function getViewerLevel(score) {
 let globalSentToday = 0;
 let lastGlobalResetDay = "";
 
-function resetGlobalDailyIfNeeded() {
+// Per-lead messages sent today (catch-up guard: max 2/day even when catching up)
+const sentTodayByLead = new Map(); // key: phone → count
+let sentTodayDay = "";
+
+function resetDailyCounters() {
   const today = new Date().toDateString();
   if (today !== lastGlobalResetDay) {
     globalSentToday = 0;
     lastGlobalResetDay = today;
+  }
+  if (today !== sentTodayDay) {
+    sentTodayByLead.clear();
+    sentTodayDay = today;
   }
 }
 
 async function sendBulk() {
   if (isSendingReminders) return;
   isSendingReminders = true;
-  resetGlobalDailyIfNeeded();
+  resetDailyCounters();
 
   try {
     let poster = null;
@@ -167,6 +175,16 @@ async function sendBulk() {
           continue;
         }
 
+        // ── Catch-up guard: max 2/day per lead even when catching up ──
+        // Uses the persisted "Sent Today" column; resets when the date changes
+        // (checked below on each successful send).
+        const phoneKey = String(lead.phone || "").replace(/\D/g, "");
+        const leadSentToday = Number(lead.sentToday || 0);
+        if (leadSentToday >= CONFIG.maxMessagesPerDay) {
+          console.log(`   ⏳ ${lead.name || lead.phone}: daily cap (${CONFIG.maxMessagesPerDay}) reached — will retry tomorrow`);
+          continue;
+        }
+
         if (!isSlotDue(slotTime)) {
           console.log(`   ⏳ ${lead.name || lead.phone}: day${day} slot${slot} not due yet (${slotTime})`);
           continue;
@@ -215,6 +233,13 @@ async function sendBulk() {
             ? "done"
             : `day${Math.floor(newCount / 2) + 1}`;
 
+          // Sent Today counter — reset if last send was a previous day, else increment
+          const lastSentNum = Number(lead.lastSentAt || 0);
+          const sentTodayValue =
+            lead.lastSentAt && isSameDay(lastSentNum, now)
+              ? (Number(lead.sentToday || 0) + 1)
+              : 1;
+
           await updateLeadProgress(lead, {
             stage: newStage,
             day: String(day),
@@ -222,7 +247,11 @@ async function sendBulk() {
             status: newCount >= CONFIG.totalSessions ? "done" : "active",
             messagesSent: newCount,
             lastSentAt: String(Date.now()),
+            sentToday: sentTodayValue,
           });
+
+          // Track for the catch-up guard (in-memory mirror)
+          sentTodayByLead.set(phoneKey, sentTodayValue);
 
           globalSentToday += 1;
           console.log(`   📈 ${lead.name || lead.phone}: ${newCount}/${CONFIG.totalSessions} | ${globalSentToday}/${CONFIG.globalDailyCap} today`);
@@ -231,10 +260,16 @@ async function sendBulk() {
           console.log(`   ⏳ waiting ${Math.round(wait / 1000)}s`);
           await new Promise((r) => setTimeout(r, wait));
         } catch (err) {
-          console.log(`   ❌ Send failed for ${lead.name || lead.phone}: ${err.message}`);
-          if (String(err.message || "").toLowerCase().includes("no lid")) {
+          // Failed send — do NOT count it, do NOT advance. Retry same slot next tick.
+          const msg = String(err.message || "").toLowerCase();
+          console.log(`   ❌ Send failed for ${lead.name || lead.phone}: ${err.message} (will retry)`);
+
+          if (msg.includes("no lid") || msg.includes("invalid wid") || msg.includes("not a whatsapp user")) {
+            // Number genuinely invalid — mark it and don't retry forever
             await updateLeadProgress(lead, { status: "not_exist" });
+            console.log(`   🚫 ${lead.name || lead.phone}: number invalid — marked not_exist (no more sends)`);
           }
+          // Other errors (network, timeout, temp) → leave progress unchanged → retried next minute
         }
       }
     }

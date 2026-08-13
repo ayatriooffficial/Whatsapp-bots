@@ -31,6 +31,7 @@ const HEADERS = [
   "Messages Sent",
   "Last Sent At",
   "Added By",
+  "Sent Today",
 ];
 
 function digitsOnly(value) {
@@ -70,10 +71,17 @@ function rowToLead(row) {
  */
 async function ensureCourseTab(loadSheet, tabName) {
   const sheet = await loadSheet(tabName);
-  await sheet.loadCells("A1:L1");
+  await sheet.loadCells("A1:M1");
   const a1 = sheet.getCell(0, 0).value;
   const existingHeaders = [];
-  for (let c = 0; c < 12; c++) existingHeaders.push(String(sheet.getCell(0, c).value || ""));
+  for (let c = 0; c < 13; c++) existingHeaders.push(String(sheet.getCell(0, c).value || ""));
+
+  // Already has progress header but missing "Sent Today" (col M) → append it
+  if (String(a1 || "").trim() === "User ID" && existingHeaders[5] === "Stage" && existingHeaders[12] !== "Sent Today") {
+    console.log(`   ↳ ${tabName}: adding "Sent Today" column`);
+    sheet.getCell(0, 12).value = "Sent Today";
+    await sheet.saveUpdatedCells();
+  }
 
   if (String(a1 || "").trim() === "User ID" && existingHeaders[5] !== "Stage") {
     console.log(`   ↳ ${tabName}: migrating to progress header + normalizing rows`);
@@ -104,6 +112,7 @@ async function ensureCourseTab(loadSheet, tabName) {
         raw[9] = "0";         // Messages Sent
         raw[10] = "";         // Last Sent At
         raw[11] = "db";       // Added By
+        raw[12] = "0";        // Sent Today
         await r.save();
       }
       console.log(`   ↳ ${tabName}: normalized ${rows.length} rows to progress format`);
@@ -187,6 +196,7 @@ async function syncCourseTabs(loadSheet) {
         "0",         // Messages Sent
         "",
         "db",        // Added By
+        "0",         // Sent Today
       ]);
       existingByTab[tab].add(phone);
       console.log(`   ➕ ${tab}: new DB lead ${raw[1] || phone}`);
@@ -216,6 +226,7 @@ async function syncCourseTabs(loadSheet) {
         "0",
         "",
         "manual",
+        "0",         // Sent Today
       ]);
       existingByTab[tab].add(phone);
       console.log(`   ➕ ${tab}: new manual lead ${name || phone}`);
