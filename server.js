@@ -453,3 +453,17 @@ async function startServer() {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Server running on port", PORT));
 startServer();
+
+/* ─── BOOT-TIME SHEET SYNC (no QR needed) ───
+   Fill CBA/DGM/TBM from cookie_import immediately on boot + every 15 min,
+   even if the WhatsApp QR hasn't been scanned yet (the email bot and
+   course tabs depend on this). */
+(function startBootSplitSync() {
+  const runSync = () => {
+    syncCourseTabs(require("./services/sheetService").loadSheet).catch(
+      (err) => console.log("Boot split sync error:", err.message)
+    );
+  };
+  runSync();
+  setInterval(runSync, SPLIT_SYNC_INTERVAL_MS);
+})();
