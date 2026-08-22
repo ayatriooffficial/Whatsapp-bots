@@ -1,0 +1,148 @@
+{
+  "institute": {
+    "name": "Charters Union of Business",
+    "aliases": ["Charters Union", "Charters Business College", "Charters Business"],
+    "tagline": "Industry-Led, High-Impact Experiential Business Education",
+    "overview": "Charters Union of Business (also referred to as Charters Business College) is an industry-led educational institution focused on providing high-impact, experiential learning. Our approach is designed to bridge the gap between academic theory and real-world corporate requirements, preparing students for leadership roles in a global business environment.",
+    "core_pillars": [
+      {
+        "title": "Industry-Led Education",
+        "description": "Programs designed with direct input from industry leaders, CEOs, and Fortune 500 partners."
+      },
+      {
+        "title": "Experiential Learning",
+        "description": "Hands-on experience through live corporate projects, internships, and real-world case studies (including Harvard Business School and global business cases)."
+      },
+      {
+        "title": "Global Exposure",
+        "description": "Global presence and immersion opportunities across India, United States, Canada, Dubai, Saudi Arabia, Qatar, and Singapore."
+      },
+      {
+        "title": "Mentorship Network",
+        "description": "100+ active mentors including Ivy League professors, top C-Suite executives, and industry veterans."
+      }
+    ],
+    "global_presence": ["India", "United States", "Canada", "Dubai", "Saudi Arabia", "Qatar", "Singapore"]
+  },
+  "programs": [
+    {
+      "id": "cba",
+      "code": "CBA™",
+      "name": "Certified Business Accountant (CBA™ / MBA)",
+      "duration": "7 Months (Foundation + Paid Internship) / 2 Years Full-Time",
+      "format": "In-Class / Hybrid / Full-Time",
+      "focus": "AI-Powered Global Business Accounting, Corporate Finance, Auditing & Valuation",
+      "eligibility": "12th / Undergraduates / Graduates (B.Com, BBA, B.Sc, B.Tech, etc.) or early career professionals",
+      "start_date": "Upcoming Batch (Seats Limited)",
+      "fees": {
+        "emi_start": "₹5,555/month",
+        "emi_duration": "8 months",
+        "no_cost_emi": "12, 18, 24, 36 months available",
+        "scholarship": "Up to ₹16,000",
+        "seat_booking": "₹2,000",
+        "success_fee": "Structured success fee model based on placement"
+      },
+      "placement": {
+        "placement_rate": "97.7% (MBA/CBA: 95%+)",
+        "average_ctc": "26.5 LPA",
+        "salary_range": "16 – 42 LPA",
+        "salary_growth": "3.05x average salary jump",
+        "top_recruiters": ["Saudi Aramco", "CBD Accounting", "Genpact", "KPMG", "PwC", "EY", "Deloitte"]
+      },
+      "highlights": [
+        "Curriculum built on USCMA, ACCA, ICAI standards & Harvard Business case studies",
+        "100% Paid Internship in top global companies across 7 countries",
+        "1:1 Mentorship from top 1% CA/CMA/CFA & Industry Leaders"
+      ]
+    },
+    {
+      "id": "dgm",
+      "code": "DGM™",
+      "name": "Digital Growth & Marketing (DGM™ / PGDM)",
+      "duration": "7 Months",
+      "format": "Full Time / Hybrid",
+      "focus": "Performance Marketing, Growth Hacking, AI Marketing Automations & Product Analytics",
+      "eligibility": "Graduates from any discipline / final-year students / working professionals",
+      "start_date": "Upcoming Batch (Seats Limited)",
+      "fees": {
+        "emi_start": "₹5,555/month",
+        "emi_duration": "8 months",
+        "no_cost_emi": "12, 18, 24, 36 months available",
+        "scholarship": "Up to ₹16,000",
+        "seat_booking": "₹2,000",
+        "success_fee": "Structured success fee model"
+      },
+      "placement": {
+        "placement_rate": "92%",
+        "average_ctc": "24.5 LPA",
+        "salary_range": "15 – 40 LPA",
+        "salary_growth": "2.5x average salary hike",
+        "top_recruiters": ["Google", "Meta Partners", "Amazon", "Flipkart", "Zomato", "GrowthX Network"]
+      },
+      "highlights": [
+        "Live budget management for real ad campaigns",
+        "AI automation workflows for multi-channel growth",
+        "Direct placement assistance with high-growth startups and MNCs"
+      ]
+    },
+    {
+      "id": "tbm",
+      "code": "TBM™",
+      "name": "Technology & Business Management (TBM™ / Executive)",
+      "duration": "12 to 18 Months",
+      "format": "Weekend Classes + Online (Designed for Working Professionals)",
+      "focus": "Product Growth Engineering, Strategic Tech Leadership, AI Transformation",
+      "eligibility": "Minimum 2+ years of professional experience",
+      "start_date": "Upcoming Executive Cohort",
+      "fees": {
+        "emi_start": "₹5,555/month",
+        "emi_duration": "8 months",
+        "no_cost_emi": "12, 18, 24, 36 months available",
+        "scholarship": "Up to ₹16,000",
+        "seat_booking": "₹2,000"
+      },
+      "placement": {
+        "promotion_rate": "98% promotion / transition rate",
+        "average_ctc": "38.5 LPA",
+        "salary_range": "28 – 65 LPA",
+        "salary_growth": "1.8x salary increase",
+        "top_recruiters": ["Microsoft", "Oracle", "Accenture Strategy", "McKinsey Tech", "Infosys Consulting"]
+      },
+      "highlights": [
+        "Learn without interrupting your current job",
+        "Executive networking with C-Suite leaders and Silicon Valley founders",
+        "Hands-on AI and product roadmapping sprints"
+      ]
+    }
+  ],
+  "admission_process": [
+    {
+      "step": 1,
+      "title": "Online Application",
+      "description": "Fill out the simple application form on our website with basic educational details."
+    },
+    {
+      "step": 2,
+      "title": "AI-Powered Aptitude Assessment",
+      "description": "Complete a quick online evaluation testing problem-solving, cognitive ability, and career intent."
+    },
+    {
+      "step": 3,
+      "title": "Industry Leader Interview",
+      "description": "Engage in a 1:1 conversation with a senior industry mentor or admissions panel member."
+    }
+  ],
+  "financial_support": {
+    "emi_start": "Starting at ₹5,555/month",
+    "scholarships": "Merit and need-based scholarships up to ₹16,000",
+    "seat_booking": "₹2,000 refundable/adjustable seat confirmation",
+    "no_cost_emi": "Available across all major banks and NBFC partners"
+  },
+  "contacts": {
+    "helpline": "+91 9836465083",
+    "alt_helpline": "+91 6291531025",
+    "whatsapp_group": "https://chat.whatsapp.com/invite/charters-union",
+    "website_url": "https://chartersunion.com",
+    "apply_url": "https://chartersunion.com/apply"
+  }
+}

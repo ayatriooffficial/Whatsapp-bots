@@ -277,6 +277,9 @@ const COURSE_COL = {
   LAST_SENT_AT: 10,
   ADDED_BY: 11,
   SENT_TODAY: 12,
+  EMAIL_SENT: 13,
+  WA_SEEN: 14,
+  EMAIL_SEEN: 15,
 };
 
 function isDividerRow(row) {
@@ -339,6 +342,9 @@ async function updateLeadProgress(lead, updates) {
     if (updates.slot !== undefined) raw[COURSE_COL.SLOT] = updates.slot;
     if (updates.status !== undefined) raw[COURSE_COL.STATUS] = updates.status;
     if (updates.messagesSent !== undefined) raw[COURSE_COL.SENT_COUNT] = String(updates.messagesSent);
+    if (updates.emailSent !== undefined) raw[COURSE_COL.EMAIL_SENT] = String(updates.emailSent);
+    if (updates.waSeen !== undefined) raw[COURSE_COL.WA_SEEN] = String(updates.waSeen);
+    if (updates.emailSeen !== undefined) raw[COURSE_COL.EMAIL_SEEN] = String(updates.emailSeen);
     if (updates.lastSentAt !== undefined) raw[COURSE_COL.LAST_SENT_AT] = updates.lastSentAt;
     if (updates.sentToday !== undefined) raw[COURSE_COL.SENT_TODAY] = String(updates.sentToday);
     await lead.row.save();

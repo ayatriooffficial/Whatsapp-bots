@@ -109,9 +109,10 @@ async function sendBulk() {
     const now = new Date();
     console.log(`📋 Campaign check ${now.toLocaleTimeString()}`);
 
-    // TEST MODE — restrict to one phone
-    const testPhone = process.env.TEST_MODE === "true"
-      ? String(process.env.TEST_PHONE || "").replace(/\D/g, "")
+    // SANDBOX / TEST MODE — restrict to one designated test phone
+    const isSandbox = process.env.SANDBOX === "true" || process.env.TEST_MODE === "true";
+    const testPhone = isSandbox
+      ? String(process.env.SANDBOX_PHONE || process.env.TEST_PHONE || "").replace(/\D/g, "")
       : "";
 
     for (const tab of Object.values(COURSE_TABS)) {
@@ -123,11 +124,14 @@ async function sendBulk() {
         continue;
       }
 
-      if (testPhone) {
+      if (isSandbox && testPhone) {
         leads = leads.filter((l) =>
           String(l.phone || "").replace(/\D/g, "").endsWith(testPhone.slice(-10))
         );
-        console.log(`  🧪 TEST MODE ${tab}: ${leads.length} matching lead(s)`);
+        console.log(`  🧪 SANDBOX MODE ${tab}: ${leads.length} matching lead(s) for ${testPhone}`);
+      } else if (isSandbox && !testPhone) {
+        console.log(`  🛑 SANDBOX active but no SANDBOX_PHONE set — skipping live sends`);
+        leads = [];
       }
 
       for (const lead of leads) {

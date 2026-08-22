@@ -225,6 +225,51 @@ app.get("/load-leads", async (req, res) => {
   loadLeadsIntoStore().catch(err => console.log("Lead load error:", err.message));
 });
 
+/* ---------------- SANDBOX FAST-TRACK TESTING ---------------- */
+
+const { runSandboxStageCampaign, isSandboxRunning } = require("./services/sandboxRunner");
+
+app.get("/sandbox/status", (req, res) => {
+  res.json({
+    sandbox: process.env.SANDBOX === "true",
+    sandboxPhone: process.env.SANDBOX_PHONE || "Not configured",
+    sandboxCourse: process.env.SANDBOX_COURSE || "CBA",
+    fastDelaySec: Number(process.env.SANDBOX_FAST_DELAY_SEC || 10),
+    isRunning: isSandboxRunning(),
+    instructions: "To trigger sandbox test run, open /sandbox/run in your browser."
+  });
+});
+
+app.get("/sandbox/run", async (req, res) => {
+  const phone = req.query.phone || process.env.SANDBOX_PHONE;
+  const course = req.query.course || process.env.SANDBOX_COURSE || "ALL";
+  const delaySec = Number(req.query.delay || process.env.SANDBOX_FAST_DELAY_SEC || 8);
+  const name = req.query.name || process.env.SANDBOX_NAME || "Candidate";
+
+  if (!phone || String(phone).includes("X")) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid SANDBOX_PHONE. Please set SANDBOX_PHONE=91XXXXXXXXXX in .env or pass ?phone=91XXXXXXXXXX"
+    });
+  }
+
+  if (isSandboxRunning()) {
+    return res.status(429).json({ success: false, message: "Sandbox campaign is already running in background." });
+  }
+
+  res.json({
+    success: true,
+    message: `Fast-track sandbox campaign initiated for +${phone}. Delivering both CBA and DGM stage messages with ${delaySec}s intervals.`,
+    phone,
+    course,
+    delaySec,
+  });
+
+  runSandboxStageCampaign({ phone, course, delaySec, name }).catch(err => {
+    console.error("Sandbox run error:", err.message);
+  });
+});
+
 /* ---------------- MESSAGE HANDLER ---------------- */
 
 function registerMessageHandler() {
@@ -238,6 +283,80 @@ function registerMessageHandler() {
     try {
       if (msg.fromMe) return;
 
+      /* -------- GROUP CHAT BOT HANDLER (@g.us) -------- */
+      const isGroup = msg.from && msg.from.endsWith("@g.us");
+      if (isGroup) {
+        const botWid = client.info?.wid?._serialized || "";
+        const botNumber = client.info?.wid?.user || "";
+
+        const isMentioned = Array.isArray(msg.mentionedIds) && (
+          msg.mentionedIds.includes(botWid) ||
+          (botNumber && msg.mentionedIds.some(id => id.includes(botNumber)))
+        );
+
+        let isQuotedBot = false;
+        if (msg.hasQuotedMsg) {
+          try {
+            const quoted = await msg.getQuotedMessage();
+            if (quoted && (quoted.fromMe || quoted.author === botWid || quoted.from === botWid)) {
+              isQuotedBot = true;
+            }
+          } catch (_) {}
+        }
+
+        const bodyText = String(msg.body || msg.caption || "").trim();
+        const lowerBody = bodyText.toLowerCase();
+        const hasPrefixTrigger =
+          lowerBody.startsWith("@ragini") ||
+          lowerBody.startsWith("ragini,") ||
+          lowerBody.startsWith("/ask") ||
+          lowerBody.startsWith("!ask") ||
+          lowerBody.startsWith("@bot");
+
+        if (!isMentioned && !isQuotedBot && !hasPrefixTrigger) {
+          // Normal chatter between group members — stay silent
+          return;
+        }
+
+        // Clean trigger prefix from question text
+        let cleanQuery = bodyText
+          .replace(/@\d+/g, "")
+          .replace(/^@ragini\b/i, "")
+          .replace(/^ragini,\s*/i, "")
+          .replace(/^\/ask\s*/i, "")
+          .replace(/^!ask\s*/i, "")
+          .replace(/^@bot\b/i, "")
+          .trim();
+
+        if (!cleanQuery) cleanQuery = "hi";
+
+        let senderName = "there";
+        let senderPhone = "";
+        try {
+          const contact = await msg.getContact();
+          senderName = contact.pushname || contact.name || "there";
+          senderPhone = contact.number || String(msg.author || "").replace(/\D/g, "");
+        } catch (_) {
+          senderPhone = String(msg.author || "").replace(/\D/g, "");
+        }
+
+        console.log(`👥 Group mention in ${msg.from} from ${senderName} (+${senderPhone}): "${cleanQuery}"`);
+
+        const groupReply = await replyEngine(
+          { ...msg, body: cleanQuery },
+          senderPhone ? `${senderPhone}@c.us` : null,
+          "GROUP_INQUIRY",
+          { isGroup: true, senderName }
+        );
+
+        if (groupReply) {
+          await msg.reply(groupReply);
+          console.log(`✅ Group reply sent in ${msg.from} to ${senderName}`);
+        }
+        return;
+      }
+
+      /* -------- 1-ON-1 DIRECT USER CHAT -------- */
       const { user: directUser, chatId } = await resolveUserFromMessage(msg);
       if (!directUser || !chatId) return;
 

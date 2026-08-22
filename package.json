@@ -5,6 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "sandbox": "node test/runSandboxCampaign.js",
+    "test:inbound": "node test/testInboundBot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
