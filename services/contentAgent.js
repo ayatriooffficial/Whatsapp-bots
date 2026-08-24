@@ -104,7 +104,7 @@ function getProgramStats(program) {
     return [
       home?.placement_highlights?.highest_ctc ? `🏆 Highest CTC: ${home.placement_highlights.highest_ctc}` : null,
       home?.placement_highlights?.average_ctc ? `💼 Average CTC: ${home.placement_highlights.average_ctc}` : null,
-      "📈 Placement Rate: 95%",
+      (home?.placement_highlights?.placement_rate || home?.placement_highlights?.promotion_rate) ? `📈 Placement Rate: ${home.placement_highlights.placement_rate || home.placement_highlights.promotion_rate}` : null,
       home?.placement_highlights?.recruiters ? `🏢 Recruiters: ${home.placement_highlights.recruiters}` : null
     ].filter(Boolean);
   }
@@ -531,7 +531,7 @@ Constraints:
   const bullets = dedupe([
     faculty?.top_institutions?.length ? `👨‍🏫 *Faculty:* ${safeJoin(faculty.top_institutions, 3)}` : "",
     institute?.global_presence?.length ? `🌍 *Global presence:* ${safeJoin(institute.global_presence, 4)}` : "",
-    "📈 *Placement rate:* 95%",
+    home?.placement_highlights?.placement_rate ? `📈 *Placement rate:* ${home.placement_highlights.placement_rate}` : "",
     home?.placement_highlights?.average_ctc ? `💼 *Average CTC:* ${home.placement_highlights.average_ctc}` : ""
   ]).slice(0, 4);
 

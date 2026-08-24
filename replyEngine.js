@@ -3,6 +3,7 @@ const chartersKnowledge = require("./data/chartersKnowledge.json");
 const findProgram = require("./services/findProgram");
 const askAI = require("./services/aiReply");
 const tracker = require("./services/engagementTracker");
+const { getWebsiteContext } = require("./services/websiteContext");
 
 const APP_BASE_URL = (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, "");
 const WEBSITE_BASE_URL = (process.env.WEBSITE_BASE_URL || "https://chartersunion.com").replace(/\/+$/, "");
@@ -57,67 +58,26 @@ Would you like to explore our industry-ready programs, placement statistics, or 
 }
 
 /* ================================================================
-   INSTANT DIRECT FACT RESPONSES
-================================================================ */
-function getFactReply(question, program, userName = "there") {
-  const q = String(question || "").toLowerCase().trim();
-  if (!program) return null;
-
-  // 1. FEES / EMI / SCHOLARSHIP
-  if (q.includes("fee") || q.includes("cost") || q.includes("emi") || q.includes("scholarship")) {
-    return `💰 *${program.name} — Fee & Financial Details*
-
-• *EMI Starts:* ${program.fees?.emi_start || "₹5,555/month"}
-• *EMI Duration:* ${program.fees?.emi_duration || "8 months"}
-• *No-Cost EMI:* ${program.fees?.no_cost_emi || "12, 18, 24, 36 months available"}
-• *Scholarship Available:* ${program.fees?.scholarship || "Up to ₹16,000"}
-• *Seat Booking:* ${program.fees?.seat_booking || "₹2,000"}`;
-  }
-
-  // 2. PLACEMENT / SALARY / CTC / ROI
-  if (q.includes("placement") || q.includes("salary") || q.includes("ctc") || q.includes("package") || q.includes("recruit")) {
-    const pl = program.placement || {};
-    const recruiters = (pl.top_recruiters || []).join(", ");
-    return `📈 *${program.name} — Placement Highlights*
-
-🏆 *Placement / Promotion Rate:* ${pl.placement_rate || pl.promotion_rate || "95%+"}
-💼 *Average CTC:* ${pl.average_ctc || "26.5 LPA"}
-💰 *Salary Range:* ${pl.salary_range || "16 – 42 LPA"}
-📈 *Salary Hike:* ${pl.salary_growth || "3.05x jump"}
-🏢 *Top Recruiters:* ${recruiters || "Saudi Aramco, KPMG, PwC, EY, Genpact"}`;
-  }
-
-  // 3. DURATION & FORMAT
-  if (q.includes("duration") || q.includes("how long") || q.includes("format") || q.includes("batch")) {
-    return `⏱️ *${program.name} — Duration & Format*
-
-📅 *Duration:* ${program.duration}
-💻 *Format:* ${program.format}
-🎯 *Focus:* ${program.focus}
-🚀 *Next Batch:* ${program.start_date}`;
-  }
-
-  // 4. ELIGIBILITY
-  if (q.includes("eligib") || q.includes("qualify") || q.includes("who can apply")) {
-    return `📋 *${program.name} — Eligibility Criteria*
-
-✅ ${program.eligibility}
-🚀 *Next Batch:* ${program.start_date}`;
-  }
-
-  return null;
-}
-
-/* ================================================================
    GEMINI AI DYNAMIC REPLIES
 ================================================================ */
 async function getAIReply(question, program = null, userName = "there", isGroup = false) {
   const firstName = (userName || "there").split(" ")[0];
 
+  let liveContextText = "";
+  try {
+    const ws = await getWebsiteContext();
+    if (ws && ws.context) {
+      liveContextText = ws.context;
+    }
+  } catch (_) {}
+
+  const knowledgeBaseText = liveContextText
+    ? `=== LIVE CHARTERS UNION KNOWLEDGE BASE (from chartersunion.com) ===\n${liveContextText}`
+    : `CHARTERS UNION VERIFIED KNOWLEDGE BASE:\n${JSON.stringify(chartersKnowledge, null, 2)}`;
+
   const systemInstruction = `You are Ragini, the dedicated AI Admission Counselor for Charters Union of Business (also referred to as Charters Business College).
 
-CHARTERS UNION VERIFIED KNOWLEDGE BASE:
-${JSON.stringify(chartersKnowledge, null, 2)}
+${knowledgeBaseText}
 
 CORE MISSION & PERSONALITY:
 - Friendly, professional, highly encouraging, and deeply knowledgeable admission counselor.
@@ -137,15 +97,12 @@ STRICT FORMATTING RULES (NATIVE WHATSAPP FORMAT):
    - NEVER use HTML tags (<u>, </u>, <ins>, <b>, <i>, <h1>-<h6>) — WhatsApp renders them as broken raw text!
    - NEVER use Markdown heading tags (#, ##, ###) — use clean *Bold Section Titles* instead.
    - Leave a blank line between sections.
-2. Structure for general questions ("what is charters union", "about college", etc.):
-   - *About Charters Union* summary
-   - *Core Learning Approach* (Industry-Led Education, Experiential Learning, Global Exposure across 7 countries, Mentorship with 100+ mentors)
-   - *Core Programs* overview (CBA™ 2 Years / 7 Months, DGM™ 7 Months, TBM™ 12-18 Months)
-   - *Key Highlights* (Placements, CTC, ROI, No-cost EMI from ₹5,555/mo, Scholarships up to ₹16,000, 3-step admission process)
+2. Structure for counselor replies:
+   - Greet the student warmly
+   - Provide direct, concise answers grounded in live website data
+   - Highlight practical simulations, 1:1 CXO mentors, and 100% in-class paid internships across 7 countries
    - Conclude with a warm invitation to ask about specific programs, fees, or placements.
-3. For ROI (Return on Investment) queries:
-   - Explain how affordable fees / low EMI starting at ₹5,555/month paired with high Average CTCs (CBA: 26.5 LPA with 3.05x jump, DGM: 24.5 LPA with 2.5x hike, TBM: 38.5 LPA with 1.8x increase) deliver exceptional ROI in just 7 to 24 months.
-4. Keep the total response concise, structured, and easy to read on mobile screens (under ${isGroup ? 180 : 250} words).`;
+3. Keep the total response concise, structured, and easy to read on mobile screens (under ${isGroup ? 180 : 250} words).`;
 
   const prompt = `User Name: ${firstName}
 Chat Context: ${isGroup ? "WhatsApp Group Thread" : "Direct WhatsApp Chat"}
@@ -165,19 +122,15 @@ Provide a structured, engaging, and accurate counselor response for WhatsApp:`;
 
   return `✨ *Welcome to Charters Union of Business!*
 
-Charters Union is an industry-led institution providing high-impact, experiential business programs:
+Charters Union is an industry-led institution providing high-impact, experiential career programs (*CBA™*, *DGM™*, *TBM™*).
 
-🎓 *Available Programs:*
-• *CBA™ (Certified Business Accountant)* — 7 Months / 2 Years (Avg CTC: 26.5 LPA)
-• *DGM™ (Digital Growth & Marketing)* — 7 Months (Avg CTC: 24.5 LPA)
-• *TBM™ (Technology & Business Management)* — 12-18 Months (Avg CTC: 38.5 LPA)
+💡 *Core Highlights:*
+• 100% In-Class Paid Internships across 7 countries (USA, Dubai, Singapore, etc.)
+• 1:1 Mentorship from top 1% CA/CMA/CFA professionals & Fortune 500 CXOs
+• AI Career Engine real-time skill-gap tracking & mock interview scoring
+• Flexible financing: Merit Scholarships and No-Cost EMI options available
 
-💡 *Key Benefits:*
-• 100% Paid Internships & Top MNC placements (95%+)
-• Global exposure across 7 countries (USA, Dubai, Singapore, etc.)
-• No-cost EMI starting at ₹5,555/month & scholarships up to ₹16,000
-
-Feel free to ask about fees, placements, or admission eligibility for any program!`;
+Feel free to ask any question regarding our programs, syllabus, fees, or placement outcomes!`;
 }
 
 /* ================================================================
@@ -220,24 +173,7 @@ How can I help you with your career goals today?${buildAdmissionFooter(phone, is
   // 4. Detect program from question
   const program = findProgram(q);
 
-  // 5. General Programs list inquiry
-  if (!program && (q === "programs" || q === "courses" || q.includes("what courses") || q.includes("available programs") || q.includes("what do you offer"))) {
-    const pList = (chartersKnowledge.programs || []).map(p => 
-      `🎓 *${p.name}*\n⏳ Duration: ${p.duration} | 💻 ${p.format}\n🏆 Avg CTC: ${p.placement?.average_ctc || "25+ LPA"}`
-    ).join("\n\n");
-
-    return `📚 *Programs at Charters Union*\n\n${pList}\n\n💬 *Reply with any program name (e.g., CBA, DGM, or TBM) for complete details!*${buildAdmissionFooter(phone, isGroup)}`;
-  }
-
-  // 6. Instant fact reply for specific program questions
-  if (program) {
-    const fact = getFactReply(q, program, userName);
-    if (fact) {
-      return `${fact}${buildAdmissionFooter(phone, isGroup)}`;
-    }
-  }
-
-  // 7. General AI dynamic reply
+  // 5. Inquire program dynamically via Gemini RAG
   const aiAnswerText = await getAIReply(rawBody, program, userName, isGroup);
   return `${aiAnswerText}${buildAdmissionFooter(phone, isGroup)}`;
 }
