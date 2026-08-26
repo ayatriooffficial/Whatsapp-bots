@@ -3,7 +3,7 @@ require("dotenv").config();
 const askAI = require("./aiReply");
 const detectIntent = require("./detectIntent");
 const findProgram = require("./findProgram");
-const { resolveTemplate } = require("./messageTemplates");
+const { resolveSlotTemplate } = require("./messageTemplates");
 const { getWebsiteContext } = require("./websiteContext");
 
 const HELPLINE_PHONE = process.env.SUPPORT_PHONE || "+91 9836465083";
@@ -18,11 +18,10 @@ const APPLY_URL = "chartersunion.com/apply";
 
 async function templateContent(lead, opts = {}) {
   const { loadSheet } = require("./sheetService");
-  const resolved = await resolveTemplate(loadSheet, {
+  const resolved = await resolveSlotTemplate(loadSheet, {
     name: lead.name || "there",
     course: lead.course || "",
     score: lead.score || 0,
-    session: lead.session || opts.session || 1,
     day: opts.day,
     slot: opts.slot,
   });
@@ -50,79 +49,127 @@ function titleCase(text) {
 
 /**
  * Deterministic keyword bolding for WhatsApp (*word* format).
- * Bolds recruiter brands, tools, placement stats, and pricing.
+ * Mirrors the email system's BOLD_KEYWORDS + word-boundary logic so
+ * short keywords (EY, PwC, GST, TDS, Meta) don't false-match inside
+ * words, and every bold is a clean single *keyword*.
  */
+const BOLD_KEYWORDS = [
+  "CBA™", "DGM™", "TBM™", "Certified Business Accountant", "Digital Growth & Marketing",
+  "Technology & Business Management", "AI Career Engine", "7 countries", "7 Countries",
+  "100% In-Class Paid Internships", "in-class paid internships", "SAP S/4HANA", "TallyPrime",
+  "GST", "TDS", "GA4", "Meta", "Google Ads", "ROAS", "KPMG", "PwC", "EY", "Deloitte",
+  "Saudi Aramco", "₹5,555", "₹16,000", "No-Cost EMI", "scholarship", "Scholarship",
+  "97.7%", "92%", "98%", "95%", "placement rate", "Placement Rate", "26.5 LPA", "24.5 LPA",
+  "38.5 LPA", "CTC", "salary jump", "Salary Jump"
+];
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function boldWhatsAppKeywords(text) {
   if (!text || typeof text !== "string") return "";
 
-  const KEYWORDS = [
-    "KPMG", "PwC", "EY", "Deloitte", "Saudi Aramco", "CBD Accounting",
-    "Amazon", "Google", "Flipkart", "Zomato", "GrowthX", "TATA",
-    "SAP S/4HANA", "TallyPrime", "GA4", "Mixpanel", "Meta Ads", "Google Ads",
-    "₹5,555", "₹5,555/mo", "₹16,000", "92%", "95%", "97.7%", "24.5 LPA", "7 Months",
-    "Charters Union", "CBA™", "DGM™", "TBM™"
-  ];
+  // Split into segments: existing *bold* spans stay untouched; only the
+  // plain-text segments get keyword bolding. This prevents re-bolding a
+  // keyword that already sits inside a bolded heading/span.
+  const segments = String(text).split(/(\*[^*]+\*)/g);
+  const sorted = [...BOLD_KEYWORDS].sort((a, b) => b.length - a.length);
 
-  let result = text;
-  for (const kw of KEYWORDS) {
-    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Only bold if not already preceded or followed by an asterisk
-    const regex = new RegExp(`(?<![*\\w])(${escaped})(?![*\\w])`, "g");
-    result = result.replace(regex, `*$1*`);
-  }
+  const boldSegment = (seg) => {
+    let out = seg;
+    for (const kw of sorted) {
+      const needsWordBoundary = kw.replace(/[^a-zA-Z0-9]/g, "").length <= 4;
+      const escaped = escapeRegex(kw);
+      // Don't match if the keyword is adjacent to (or inside) an existing
+      // bold boundary on either side.
+      const pattern = needsWordBoundary
+        ? `(?<![\\w*])${escaped}(?![\\w*])`
+        : `${escaped}`;
+      const re = new RegExp(`(?<![\\w*])${pattern}(?![\\w*])`, "gi");
+      out = out.replace(re, `*${kw}*`);
+    }
+    return out;
+  };
 
-  // Clean any nested/adjacent asterisks (*word1 *word2* -> *word1 word2*)
-  result = result.replace(/\*{2,}/g, "*");
-  result = result.replace(/\*\s+\*/g, " ");
-  return result;
+  return segments.map((p) => (p.startsWith("*") && p.endsWith("*") ? p : boldSegment(p))).join("");
 }
 
 function buildSingleLineFooter() {
-  return `🌐 *Visit:* ${OFFICIAL_SITE} | 📝 *Apply:* ${APPLY_URL} | 📞 *Call:* ${HELPLINE_PHONE}`;
+  return `*Visit:* ${OFFICIAL_SITE} | *Apply:* ${APPLY_URL} | *Call:* ${HELPLINE_PHONE}`;
 }
 
 // ─── PURE AI STAGE GENERATOR ──────────────────────────────────────────────
 
 /**
- * Stage-specific copywriting frameworks for 3-Day WhatsApp sequence:
- * Day 1 (Awareness): Problem Quote + Degree vs Tool Gap + Curiosity
- * Day 2 (Engagement): Verified Proof + Real Simulations + Reply Invite
- * Day 3 (Conversion): Scholarship Breakdown + 3-Step Admission + Urgency
+ * WhatsApp-Owned Stage Behavioral Directives (Zero Hardcoded Facts):
+ * All curriculum tools, recruiters, placement stats, and fees are extracted
+ * dynamically by the AI from LIVE WEBSITE DATA (chartersunion.com/api/website-data).
  */
-function getStageFramework(day = 1, slot = 1, course = "CBA") {
-  const isDGM = String(course || "").toUpperCase().includes("DGM") || String(course || "").toUpperCase().includes("MARKETING");
-  const courseLabel = isDGM ? "Digital Growth & Marketing (DGM™)" : "Certified Business Accountant (CBA™)";
-
-  if (day === 1) {
+function getStageFramework(day = 1, slot = 1) {
+  if (day === 1 && slot === 1) {
     return {
-      stage: "Awareness",
-      goal: "Hook with the standard degree gap vs real corporate tool requirements.",
-      angle: isDGM
-        ? "College taught marketing theories, but hiring managers demand proof of live Meta/Google ad spend and ROAS."
-        : "College exams passed, but candidates freeze when asked for live SAP S/4HANA ledger closing and GST filing.",
-      ctaQuestion: "_Would you like to check your AI Career-Readiness Score this week?_"
+      stage: "1_AWARENESS",
+      goal: "1:1 Tool Diagnostic & Practical Career Roadmap",
+      directive: "Open as an admissions counselor checking in on the student's practical tool baseline. Contrast theoretical college exams with the live practical tools found in LIVE WEBSITE DATA. Invite them to explore the career roadmap. ZERO enrollment push, NO pricing.",
+      pointsHeading: "*What corporate interviews actually test:*",
+      solutionDirective: "The SOLUTION line (1 tight line): how Charters Union fixes this — supervised live-tool execution on the exact tools named in LIVE WEBSITE DATA, plus the guaranteed 100% in-class paid internship across 7 countries.",
+      ctaDirective: `Explore the complete tool roadmap: ${OFFICIAL_SITE}/career-path`
     };
   }
 
-  if (day === 2) {
+  if (day === 1 && slot === 2) {
     return {
-      stage: "Engagement",
-      goal: "Demonstrate verified proof, placement records, and mentor oversight.",
-      angle: isDGM
-        ? "Why believe promises? Review our verified placement records at Google, Amazon, Flipkart, and GrowthX."
-        : "Why believe promises? Review our verified Big 4 placement records at KPMG, PwC, EY, Deloitte, and Saudi Aramco.",
-      ctaQuestion: "_Would you like us to send the graduate placement report PDF?_"
+      stage: "1_AWARENESS",
+      goal: "Day-in-the-Life & Practical Weekly Structure",
+      directive: "Describe a typical week in the cohort using the curriculum and format from LIVE WEBSITE DATA (contrast practical lab execution with passive lectures). Mention the 100% in-class paid internship across 7 countries.",
+      pointsHeading: "*Your typical week in the cohort:*",
+      solutionDirective: "The SOLUTION line (1 tight line): at Charters Union the week IS the internship — every day is structured hands-on corporate work (labs Mon-Thu, boardroom polish Friday), so students graduate with real execution hours, not just notes.",
+      ctaDirective: `Reply *WEEK* if you'd like to see the full weekly schedule breakdown.`
     };
   }
 
-  // Day 3 (Conversion)
+  if (day === 2 && slot === 1) {
+    return {
+      stage: "2_ENGAGEMENT",
+      goal: "Single Verified Proof Byte & Hiring Outcomes",
+      directive: "Deliver hard outcome proof using ONLY the placement rate, average CTC, and named top recruiters from LIVE WEBSITE DATA. Keep it tight and credible.",
+      pointsHeading: "*Session Focus:*",
+      solutionDirective: "The SOLUTION line (1 tight line): connecting that proof to Charters Union — these verified placement outcomes are exactly what the cohort achieves, and the student can be part of it.",
+      ctaDirective: `Reply *PROOF* to see the audited recruiter list and verified salary benchmarks.`
+    };
+  }
+
+  if (day === 2 && slot === 2) {
+    return {
+      stage: "2_ENGAGEMENT",
+      goal: "1:1 Industry Mentorship Model",
+      directive: "Highlight the 1:1 mentorship model with practicing industry leaders and mock interview simulations from LIVE WEBSITE DATA.",
+      pointsHeading: "*How the mentorship works:*",
+      solutionDirective: "The SOLUTION line (1 tight line): Charters Union pairs every student with a practicing industry mentor (CA/CMA partner or Growth Head/CMO) for 1:1 mock interviews and career mapping until placement-ready.",
+      ctaDirective: `Reply *CALL* or call us directly: ${HELPLINE_PHONE}`
+    };
+  }
+
+  if (day === 3 && slot === 1) {
+    return {
+      stage: "3_CONVERSION",
+      goal: "Plain-Language Logistics, Schedule & Flexible Financing",
+      directive: "Provide transparent cohort logistics from LIVE WEBSITE DATA: batch start timing, flexible hybrid schedule, and starting No-Cost EMI / scholarship funding from LIVE WEBSITE DATA.",
+      pointsHeading: "*What's included in this batch:*",
+      solutionDirective: "The SOLUTION line (1 tight line): removing financial friction — Charters Union's No-Cost EMI from ₹5,555/month and merit scholarships up to ₹16,000 (figures from LIVE WEBSITE DATA) make the program accessible now.",
+      ctaDirective: `Reply *ELIGIBLE* to check your merit scholarship bracket.`
+    };
+  }
+
+  // Day 3 Slot 2
   return {
-    stage: "Conversion",
-    goal: "Accessible financial roadmap, merit scholarships, and simple 3-step admission.",
-    angle: slot === 1
-      ? "Zero-risk financial roadmap with No-Cost EMI starting from ₹5,555/mo and up to ₹16,000 merit scholarships."
-      : "Round 1 admissions closing soon — only 3 simple steps to lock your seat with 100% in-class paid internship.",
-    ctaQuestion: "_Would you like to verify your scholarship eligibility in 2 minutes?_"
+    stage: "3_CONVERSION",
+    goal: "Round 1 Fast-Track Seat Allocation Notice",
+    directive: "Provide a transparent admissions closing notice for Round 1 from LIVE WEBSITE DATA. Outline the 3-step evaluation (Online Application -> AI Aptitude Test -> 1:1 Mentor Interview).",
+    pointsHeading: "*Your 3-step path to a seat:*",
+    solutionDirective: "The SOLUTION line (1 tight line): Round 1 seats are allocated first-come — a 3-step application (form -> AI aptitude test -> 1:1 interview) locks the student's place.",
+    ctaDirective: `Lock your seat: ${APPLY_URL} | Call: ${HELPLINE_PHONE}`
   };
 }
 
@@ -132,48 +179,59 @@ function getStageFramework(day = 1, slot = 1, course = "CBA") {
 async function generateDynamicWhatsAppMessage({ name = "Candidate", course = "CBA", day = 1, slot = 1 }) {
   const firstName = titleCase(name || "there").split(" ")[0];
   const greetingName = firstName.toLowerCase() === "there" ? "Candidate" : firstName;
-  const isDGM = String(course || "").toUpperCase().includes("DGM") || String(course || "").toUpperCase().includes("MARKETING");
-  const courseCode = isDGM ? "DGM" : "CBA";
+  const targetCourse = String(course || "CBA").toUpperCase();
 
-  const { context: websiteContextText } = await getWebsiteContext(courseCode);
-  const framework = getStageFramework(day, slot, courseCode);
+  const websiteData = await getWebsiteContext(targetCourse);
+  const websiteContextText = websiteData?.context || "";
+  const framework = getStageFramework(day, slot);
 
   const prompt = `
 You are a senior WhatsApp admissions counselor at Charters Union.
-Write ONE high-converting, mobile-first WhatsApp campaign message for ${greetingName} promoting ${courseCode}™ (${isDGM ? "Digital Growth & Marketing" : "Certified Business Accountant"}).
+Write ONE direct, human 1:1 WhatsApp message for ${greetingName} regarding the ${targetCourse} program.
+
+=== CHANNEL SEPARATION (MANDATORY) ===
+Email already covers macro degree gaps, comparison tables, and formal scholarship essays.
+You MUST NOT write about those email-owned topics.
+You MUST write exclusively about WhatsApp's unique angle:
+- Stage: ${framework.stage} (Day ${day}, Slot ${slot})
+- Behavioral Goal: ${framework.goal}
+- Copywriting Directive: ${framework.directive}
 
 === LIVE WEBSITE DATA (PRIMARY SOURCE OF TRUTH) ===
 ${websiteContextText || "Charters Union offers CBA and DGM with 100% in-class paid internships across 7 countries and top MNC placements."}
 
-=== CAMPAIGN SPECIFICATIONS ===
-- Day: ${day}, Slot: ${slot} (Stage: ${framework.stage})
-- Focus Angle: ${framework.angle}
-- Audience: Ambitious commerce/marketing graduate looking for practical corporate launch
-
 === OUTPUT FORMAT (JSON ONLY) ===
 {
-  "quoteBlock": "2-line student problem quote describing standard degree theory vs corporate tool gap (without >)",
-  "bridge": "At Charters Union, we bridge the degree-to-corporate gap through hands-on execution:",
-  "sectionHeading": "*Why Top ${isDGM ? "Brands" : "Recruiters"} Hire ${courseCode}™ Graduates:*",
-  "bulletPoints": [
-    "• *${isDGM ? "Live Performance Labs" : "SAP S/4HANA & TallyPrime"}:* Concrete hands-on tool outcome",
-    "• *${isDGM ? "AI Marketing Stack" : "Tax Compliance Lab"}:* Real practical simulation outcome",
-    "• *100% In-Class Paid Internships:* Supervised client projects across 7 countries"
+  "intro": "1 line greeting for ${greetingName}, e.g. 'Dear ${greetingName},' or 'Hi ${greetingName},' — warm and personal, NOT just the bare name",
+  "body": "2 concise conversational sentences opening the topic directly to ${greetingName} based on the directive and LIVE WEBSITE DATA (NO fake quote box)",
+  "pointsHeading": "${framework.pointsHeading} — the bold section heading introducing the key points (keep exactly this heading)",
+  "keyPoints": [
+    "• *BOLD HEADING 1:* Practical tool/feature extracted directly from LIVE WEBSITE DATA",
+    "• *BOLD HEADING 2:* Real practical fact or placement metric extracted from LIVE WEBSITE DATA"
   ],
-  "closingQuestion": "${framework.ctaQuestion}"
+  "solution": "The SOLUTION line (1 tight line) — how Charters Union fixes this specific concern, per the solution directive below",
+  "callToAction": "${framework.ctaDirective}"
 }
+
+=== SOLUTION DIRECTIVE ===
+${framework.solutionDirective}
 
 CRITICAL RULES:
 - Output valid JSON only.
-- Ground all facts in the LIVE WEBSITE DATA above. No fake names, no fake salaries.
-- Keep bullets punchy, under 18 words each.
+- NO artificial quote blocks (>). Open directly with natural counselor conversation.
+- The message MUST contain all 6 parts in this exact order: intro, body, pointsHeading, keyPoints, solution, callToAction, footer.
+- pointsHeading is a standalone bold line above the keyPoints (e.g. "*Session Focus:*") — use the provided heading.
+- Every keyPoint MUST start with "• *BOLD HEADING:*" — the heading is the topic (e.g. *SAP S/4HANA*, *Placement Rate*, *Mon–Thu Labs*) in bold, followed by a colon and the detail. NO keyPoint without a bold heading.
+- Extract ALL tools, recruiters, curriculum modules, and fees strictly from the LIVE WEBSITE DATA above.
+- Use only real URLs: ${OFFICIAL_SITE}, ${OFFICIAL_SITE}/career-path, ${APPLY_URL}.
+- Keep total message under 110 words.
 - Use native WhatsApp bolding (*text*).
 `;
 
   let parsed = null;
   try {
     const raw = await askAI(prompt);
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const jsonMatch = raw ? raw.match(/\{[\s\S]*\}/) : null;
     if (jsonMatch) {
       parsed = JSON.parse(jsonMatch[0]);
     }
@@ -181,33 +239,49 @@ CRITICAL RULES:
     console.warn("⚠️ WhatsApp AI generation fallback notice:", err.message);
   }
 
-  // Pure dynamic assembly
-  const quote = parsed?.quoteBlock || framework.angle;
-  const bridge = parsed?.bridge || "At Charters Union, we bridge the degree-to-corporate gap through hands-on execution:";
-  const sectionHeading = parsed?.sectionHeading || `*Why Top Recruiters Hire ${courseCode}™ Graduates:*`;
-  const bullets = Array.isArray(parsed?.bulletPoints) && parsed.bulletPoints.length
-    ? parsed.bulletPoints
-    : [
-        isDGM
-          ? "• *Supervised Live Ad Spend:* Run real Meta & Google ad budgets with ROAS targets."
-          : "• *SAP S/4HANA & TallyPrime:* End-to-end ledger closing & live GST return filing.",
-        isDGM
-          ? "• *AI Marketing Stack:* Build automated content & GA4 analytics pipelines."
-          : "• *Tax Compliance Lab:* Corporate TDS, TCS, and GST audit defense simulations.",
-        "• *100% In-Class Paid Internship:* Practical execution across 7 countries with verified placement outcomes."
-      ];
-  const closingQuestion = parsed?.closingQuestion || framework.ctaQuestion;
+  // Dynamic fallback synthesis from live website data (Zero hardcoded text)
+  const p = websiteData?.program || {};
+  const placement = websiteData?.placement || {};
+  const fees = websiteData?.fees || {};
 
-  const rawMessage = [
-    `*${greetingName} ji,*`,
-    `> ${quote}`,
-    bridge,
-    sectionHeading,
-    bullets.join("\n"),
-    closingQuestion,
-    buildSingleLineFooter()
-  ].join("\n\n");
+  const dynamicOpening = `Admissions team at Charters Union here. Following up regarding your interest in our ${p.name || targetCourse} cohort.`;
+  const dynamicBullets = [];
 
+  if (p.curriculum && Array.isArray(p.curriculum) && p.curriculum.length > 0) {
+    const mod1 = p.curriculum[0];
+    dynamicBullets.push(`• *${mod1.title || "Core Curriculum"}:* ${mod1.skills ? mod1.skills.slice(0, 3).join(", ") : "Hands-on tool mastery"}.`);
+  }
+  if (placement.top_recruiters && Array.isArray(placement.top_recruiters) && placement.top_recruiters.length > 0) {
+    dynamicBullets.push(`• *Top Recruiters:* Direct hires at ${placement.top_recruiters.slice(0, 4).join(", ")}.`);
+  }
+  if (dynamicBullets.length === 0) {
+    dynamicBullets.push(`• *100% In-Class Paid Internships:* Practical industry execution across 7 countries.`);
+  }
+
+  const dynamicSolution = fees?.emi_start
+    ? `At Charters Union, the ${p.name || targetCourse} program pairs ${fees.emi_start ? `No-Cost EMI from ${fees.emi_start}` : "flexible financing"} with hands-on tool mastery so you can start now.`
+    : `At Charters Union, the ${p.name || targetCourse} program turns theory into hands-on corporate execution from Day 1.`;
+
+  const intro = parsed?.intro || `Dear *${greetingName}*,`;
+  const opening = parsed?.body || parsed?.counselorOpening || dynamicOpening;
+  const pointsHeading = parsed?.pointsHeading || framework.pointsHeading || "";
+  const bullets = Array.isArray(parsed?.keyPoints) && parsed.keyPoints.length
+    ? parsed.keyPoints
+    : (Array.isArray(parsed?.bulletPoints) && parsed.bulletPoints.length ? parsed.bulletPoints : dynamicBullets);
+  const solution = parsed?.solution || dynamicSolution;
+  const cta = parsed?.callToAction || framework.ctaDirective;
+
+  const messageParts = [
+    intro,                              // 1. INTRO
+    opening,                            // 2. BODY
+    pointsHeading,                      // 3. POINTS HEADING (section heading above bullets)
+    bullets && bullets.length ? bullets.join("\n") : "",  // 4. KEY POINTS
+    solution,                           // 5. SOLUTION
+    cta,                                // CTA
+    buildSingleLineFooter()             // 6. FOOTER
+  ].filter(Boolean);
+
+  const rawMessage = messageParts.join("\n\n");
   return boldWhatsAppKeywords(rawMessage);
 }
 

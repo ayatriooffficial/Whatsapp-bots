@@ -245,6 +245,9 @@ app.get("/sandbox/run", async (req, res) => {
   const course = req.query.course || process.env.SANDBOX_COURSE || "ALL";
   const delaySec = Number(req.query.delay || process.env.SANDBOX_FAST_DELAY_SEC || 8);
   const name = req.query.name || process.env.SANDBOX_NAME || "Candidate";
+  const day = req.query.day ? Number(req.query.day) : undefined;
+  const slot = req.query.slot ? Number(req.query.slot) : undefined;
+  const approvedOnly = req.query.approvedOnly === "true" || req.query.approved === "true";
 
   if (!phone || String(phone).includes("X")) {
     return res.status(400).json({
@@ -259,13 +262,16 @@ app.get("/sandbox/run", async (req, res) => {
 
   res.json({
     success: true,
-    message: `Fast-track sandbox campaign initiated for +${phone}. Delivering both CBA and DGM stage messages with ${delaySec}s intervals.`,
+    message: `Fast-track sandbox campaign initiated for +${phone}. Delivering stage messages with ${delaySec}s intervals.`,
     phone,
     course,
     delaySec,
+    day,
+    slot,
+    approvedOnly
   });
 
-  runSandboxStageCampaign({ phone, course, delaySec, name }).catch(err => {
+  runSandboxStageCampaign({ phone, course, delaySec, name, day, slot, approvedOnly }).catch(err => {
     console.error("Sandbox run error:", err.message);
   });
 });
@@ -396,6 +402,57 @@ function registerMessageHandler() {
       if (!text) return;
 
       console.log(`💬 Message from ${user}: "${text}"`);
+
+      /* -------- INSTANT SYNCHRONOUS KEYWORD HANDLERS (PRE-GEMINI & DYNAMIC) -------- */
+      const cleanKeyword = text.replace(/[*_~`]/g, "").trim().toLowerCase();
+      let senderFirstName = "there";
+      try {
+        const contact = await msg.getContact();
+        senderFirstName = (contact.pushname || contact.name || "there").split(" ")[0];
+      } catch (_) {}
+
+      const { getWebsiteContext } = require("./services/websiteContext");
+      const userCourse = tracker.getStatus(user)?.courseName || "CBA";
+
+      if (["proof", "report", "placement", "placements"].includes(cleanKeyword)) {
+        tracker.trackReply(user);
+        tracker.completeSession(user);
+        const ws = await getWebsiteContext(userCourse);
+        const pRate = ws.placement?.placement_rate || "92%";
+        const recruiters = ws.placement?.top_recruiters?.slice(0, 5).join(", ") || "KPMG, PwC, EY, Deloitte, Saudi Aramco";
+        const reply = `Hi *${senderFirstName}*, our audited records show a *${pRate}* placement rate with direct campus hires at *${recruiters}*. Average placement timeline is 7 months with 100% in-class paid internships across 7 countries.\n\n*Visit:* https://chartersunion.com/about | *Apply:* https://chartersunion.com/apply | *Call:* +91 9836465083`;
+        await safeSendMessage(chatId, user, reply);
+        return;
+      }
+
+      if (["call", "counseling", "counselling", "mentor", "talk"].includes(cleanKeyword)) {
+        tracker.trackReply(user);
+        tracker.completeSession(user);
+        const reply = `Hi *${senderFirstName}*, our admissions desk is open! Call or WhatsApp us directly at *+91 9836465083* to speak with an admissions mentor.\n\n*Visit:* https://chartersunion.com | *Apply:* https://chartersunion.com/apply`;
+        await safeSendMessage(chatId, user, reply);
+        return;
+      }
+
+      if (["week", "schedule", "routine", "classes", "syllabus"].includes(cleanKeyword)) {
+        tracker.trackReply(user);
+        tracker.completeSession(user);
+        const ws = await getWebsiteContext(userCourse);
+        const programName = ws.program?.name || userCourse;
+        const reply = `Hi *${senderFirstName}*, the *${programName}* cohort runs Mon–Thu on live practical labs, Friday on boardroom English polish, and weekends on CXO masterclasses. Flexible evening/weekend batches available.\n\n*Explore Roadmap:* https://chartersunion.com/career-path | *Apply:* https://chartersunion.com/apply | *Call:* +91 9836465083`;
+        await safeSendMessage(chatId, user, reply);
+        return;
+      }
+
+      if (["eligible", "scholarship", "fee", "fees", "emi"].includes(cleanKeyword)) {
+        tracker.trackReply(user);
+        tracker.completeSession(user);
+        const ws = await getWebsiteContext(userCourse);
+        const emi = ws.fees?.emi_start || "₹5,555/month";
+        const scholarship = ws.fees?.scholarship_max || "₹16,000";
+        const reply = `Hi *${senderFirstName}*, Round 1 offers No-Cost EMI starting from *${emi}* and up to *${scholarship}* merit scholarships based on your aptitude score.\n\n*Visit:* https://chartersunion.com | *Apply:* https://chartersunion.com/apply | *Call:* +91 9836465083`;
+        await safeSendMessage(chatId, user, reply);
+        return;
+      }
 
     /* -------- OPT OUT -------- */
       if (isOptOutMessage(text)) {

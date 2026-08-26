@@ -38,10 +38,22 @@ let cache = { at: 0, rows: null, hasStage: false };
 
 function fillPlaceholders(text, lead) {
   const firstName = String(lead.name || "there").trim().split(" ")[0];
-  return String(text || "")
-    .replace(/\{name\}/g, firstName)
+  let out = String(text || "")
+    .replace(/\{name\}/gi, firstName)
     .replace(/\{course\}/g, String(lead.course || ""))
     .replace(/\{score\}/g, String(lead.score ?? ""));
+
+  // WhatsApp line-break guarantee: the greeting must sit on its own line,
+  // followed by one blank line, then the body.
+  // Case A: already multi-line, but greeting + body on the SAME first line
+  //   (e.g. "Om, Graduated with a B.Com...").
+  // Case B: single line with a leading "{name}," greeting + body after it.
+  const m = out.match(/^([A-Za-z][\w.'-]*|\*[A-Za-z][\w.'-]*\*)\s*[,!][ \t]+(\S.*)$/);
+  if (m) {
+    out = `${m[1]},\n\n${m[2]}`;
+  }
+
+  return out;
 }
 
 function scoreInRange(score, from, to) {
@@ -148,12 +160,14 @@ async function readRows(loadSheet) {
   return rows
     .map((row) => {
       const raw = row._rawData || [];
+      // Day/Slot normalization: trim + strip leading zeros ("01" -> "1")
+      const norm = (v) => String(v ?? "").trim().replace(/^0+/, "") || "";
       if (hasStage) {
         return {
           course: String(raw[0] ?? "").trim(),
           stage: String(raw[1] ?? "").trim(),
-          day: String(raw[2] ?? "").trim(),
-          slot: String(raw[3] ?? "").trim(),
+          day: norm(raw[2]),
+          slot: norm(raw[3]),
           time: String(raw[4] ?? "").trim(),
           scoreFrom: String(raw[5] ?? "").trim(),
           scoreTo: String(raw[6] ?? "").trim(),
@@ -164,8 +178,8 @@ async function readRows(loadSheet) {
       return {
         course: String(raw[0] ?? "").trim(),
         stage: "",
-        day: String(raw[1] ?? "").trim(),
-        slot: String(raw[2] ?? "").trim(),
+        day: norm(raw[1]),
+        slot: norm(raw[2]),
         time: String(raw[3] ?? "").trim(),
         scoreFrom: String(raw[4] ?? "").trim(),
         scoreTo: String(raw[5] ?? "").trim(),
@@ -194,8 +208,8 @@ async function resolveSlotTemplate(loadSheet, opts = {}) {
   }
 
   const c = String(course || "").toLowerCase().trim();
-  const dayS = String(day);
-  const slotS = String(slot);
+  const dayS = String(day).replace(/^0+/, "");
+  const slotS = String(slot).replace(/^0+/, "");
   const stageS = String(stage || "").toLowerCase().trim();
   const leadTab = classifyCourse(course) || ""; // CBA/DGM/TBM from the lead's full course string
 

@@ -1,16 +1,40 @@
-require("dotenv").config();
 const { MessageMedia } = require("whatsapp-web.js");
 const client = require("../bot");
 const { generateDynamicWhatsAppMessage } = require("./contentAgent");
-const { getCourseLeads, updateLeadProgress } = require("./sheetService");
+const { getCourseLeads, updateLeadProgress, loadSheet } = require("./sheetService");
+const { resolveSlotTemplate, invalidateCache } = require("./messageTemplates");
+const { pickPoster } = require("./posterPicker");
 
 let isSandboxRunning = false;
 
 /**
- * Builds a dynamic WhatsApp message for sandbox testing.
- * Uses Pure AI generation grounded in live website data (zero static templates).
+ * Builds a WhatsApp message for sandbox testing.
+ * Resolves the approved template from the Google Sheets "Messages" tab first (exact match).
+ * Falls back to dynamic AI generation ONLY if the sheet has no approved entry for that slot
+ * AND approvedOnly is not set. When approvedOnly is set, a missing approved message is a
+ * hard failure (never silently send AI content).
  */
-async function buildWhatsAppMessage({ name = "Candidate", course = "CBA", day = 1, slot = 1 }) {
+async function buildWhatsAppMessage({ name = "Candidate", course = "CBA", day = 1, slot = 1, approvedOnly = false }) {
+  try {
+    invalidateCache(); // Ensure fresh read from Google Sheets
+    const template = await resolveSlotTemplate(loadSheet, {
+      course,
+      day,
+      slot,
+      name,
+    });
+    if (template && template.content && template.content.trim().length > 10) {
+      console.log(`   📋 [Google Sheets] Using approved message from Messages tab for ${course} Day ${day} Slot ${slot}`);
+      return template.content;
+    }
+    if (approvedOnly) {
+      throw new Error(`No approved WhatsApp message for ${course} Day ${day} Slot ${slot} in the Messages tab (approvedOnly mode — no AI fallback).`);
+    }
+  } catch (err) {
+    if (approvedOnly) throw err;
+    console.log(`   ⚠️ Could not read from Google Sheets Messages tab: ${err.message}. Falling back to AI generator.`);
+  }
+
   return await generateDynamicWhatsAppMessage({ name, course, day, slot });
 }
 
@@ -68,25 +92,37 @@ async function runSandboxStageCampaign(options = {}) {
 
     let poster = null;
     try {
-      poster = MessageMedia.fromFilePath("./poster.jpeg");
+      const posterPath = pickPoster();
+      if (posterPath) poster = MessageMedia.fromFilePath(posterPath);
     } catch (_) {
-      console.log("⚠️ poster.jpeg not found — sending text only");
+      console.log("⚠️ no poster image found — sending text only");
     }
 
-    const stages = [
-      { day: 1, slot: 1, label: "Day 1 — Slot 1 (Awareness / Foundation)" },
-      { day: 1, slot: 2, label: "Day 1 — Slot 2 (Curriculum & Tools)" },
-      { day: 2, slot: 1, label: "Day 2 — Slot 1 (Verified Placements & Big 4 Proof)" },
-      { day: 2, slot: 2, label: "Day 2 — Slot 2 (1:1 Mentors & 7-Country Internships)" },
-      { day: 3, slot: 1, label: "Day 3 — Slot 1 (No-Cost EMI & Scholarships)" },
-      { day: 3, slot: 2, label: "Day 3 — Slot 2 (Round 1 Fast-Track Admission)" },
+    let stages = [
+      { day: 1, slot: 1, label: "Day 1 — Slot 1 (1:1 Tool Diagnostic & Career Roadmap)" },
+      { day: 1, slot: 2, label: "Day 1 — Slot 2 (Day-in-the-Life & Practical Weekly Structure)" },
+      { day: 2, slot: 1, label: "Day 2 — Slot 1 (Single Verified Proof Byte & Recruiter Outcomes)" },
+      { day: 2, slot: 2, label: "Day 2 — Slot 2 (1:1 Practicing Mentor Access & Mock Boardrooms)" },
+      { day: 3, slot: 1, label: "Day 3 — Slot 1 (Plain-Language Logistics, Schedule & EMI)" },
+      { day: 3, slot: 2, label: "Day 3 — Slot 2 (Round 1 Fast-Track Seat Allocation Notice)" },
     ];
 
+    if (options.day) {
+      const targetDay = Number(options.day);
+      stages = stages.filter((s) => s.day === targetDay);
+    }
+
+    if (options.slot) {
+      const targetSlot = Number(options.slot);
+      stages = stages.filter((s) => s.slot === targetSlot);
+    }
+
+    const totalMessages = coursesToRun.length * stages.length;
     let overallIndex = 0;
 
     for (const course of coursesToRun) {
       console.log(`\n──────────────────────────────────────────────────`);
-      console.log(`📚 DELIVERING ${course} PURE AI CAMPAIGN (6 STAGE MESSAGES)`);
+      console.log(`📚 DELIVERING ${course} PURE AI CAMPAIGN (${stages.length} STAGE MESSAGES)`);
       console.log(`──────────────────────────────────────────────────\n`);
 
       for (let i = 0; i < stages.length; i++) {
@@ -94,14 +130,15 @@ async function runSandboxStageCampaign(options = {}) {
         const stage = stages[i];
         console.log(`📤 [${overallIndex}/${totalMessages} | ${course}] Generating & Sending ${stage.label}...`);
 
-        const message = await buildWhatsAppMessage({
-          name: candidateName,
-          course,
-          day: stage.day,
-          slot: stage.slot,
-        });
-
         try {
+          const message = await buildWhatsAppMessage({
+            name: candidateName,
+            course,
+            day: stage.day,
+            slot: stage.slot,
+            approvedOnly: Boolean(options.approvedOnly),
+          });
+
           if (poster) {
             await client.sendMessage(recipient, poster, { caption: message });
           } else {

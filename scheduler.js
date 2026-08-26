@@ -11,8 +11,8 @@ const {
   resolveSlotTemplate,
   timeToMinutes,
 } = require("./services/messageTemplates");
-const { generateFollowupContent } = require("./services/contentAgent");
 const { COURSE_TABS } = require("./services/courseCategories");
+const { pickPoster } = require("./services/posterPicker");
 
 let reminderStarted = false;
 let isSendingReminders = false;
@@ -62,14 +62,6 @@ function randomDelay() {
   return Math.max(1000, base - jitter + Math.floor(Math.random() * jitter * 2));
 }
 
-function getViewerLevel(score) {
-  const s = Number(score || 0);
-  if (s >= 77) return "HOT";
-  if (s >= 34) return "WARM";
-  if (s >= 1) return "COLD";
-  return "NO_ACTIVITY";
-}
-
 /* ================================================================
    CAMPAIGN RUNNER — per-minute check
 ================================================================ */
@@ -101,9 +93,10 @@ async function sendBulk() {
   try {
     let poster = null;
     try {
-      poster = MessageMedia.fromFilePath("./poster.jpeg");
+      const posterPath = pickPoster();
+      if (posterPath) poster = MessageMedia.fromFilePath(posterPath);
     } catch (_) {
-      console.log("⚠️ poster.jpeg missing — text only mode");
+      console.log("⚠️ no poster image found — text only mode");
     }
 
     const now = new Date();
@@ -205,22 +198,15 @@ async function sendBulk() {
         /* ---------------- BUILD MESSAGE ---------------- */
         let message = template?.content || null;
         if (!message) {
-          try {
-            message = await generateFollowupContent(
-              { program: null, topic: `day${day}-slot${slot}` },
-              lead.course || "",
-              recipient,
-              getViewerLevel(Number(lead.score || 0)),
-              lead.name,
-              day,
-              null
-            );
-          } catch (_) {
-            message = null;
-          }
+          // NO FALLBACK: if no approved message exists in the Messages tab for
+          // this course+day+slot, skip the lead entirely instead of sending
+          // AI-generated or hardcoded fallback content.
+          console.log(`⏭️ ${lead.name || lead.phone}: no approved message for ${lead.course || "CBA"} day${day} slot${slot} — skipping (no fallback)`);
+          continue;
         }
-        if (!message || message.trim().length < 20) {
-          message = `Hi ${lead.name || "there"}! Admissions open for ${lead.course || "our programs"}.\nReply YES to know more.`;
+        if (message.trim().length < 20) {
+          console.log(`⏭️ ${lead.name || lead.phone}: approved message too short for day${day} slot${slot} — skipping (no fallback)`);
+          continue;
         }
 
         /* ---------------- SEND ---------------- */

@@ -33,6 +33,8 @@ const HEADERS = [
   "Added By",
   "Sent Today",
   "Email Sent",
+  "WA Seen",
+  "Email Seen",
 ];
 
 function digitsOnly(value) {
@@ -88,6 +90,20 @@ async function ensureCourseTab(loadSheet, tabName) {
   if (String(a1 || "").trim() === "User ID" && existingHeaders[5] === "Stage" && existingHeaders[13] !== "Email Sent") {
     console.log(`   ↳ ${tabName}: adding "Email Sent" column`);
     sheet.getCell(0, 13).value = "Email Sent";
+    await sheet.saveUpdatedCells();
+  }
+
+  // Has progress header but missing "WA Seen" (col O) → append it
+  if (String(a1 || "").trim() === "User ID" && existingHeaders[5] === "Stage" && existingHeaders[14] !== "WA Seen") {
+    console.log(`   ↳ ${tabName}: adding "WA Seen" column`);
+    sheet.getCell(0, 14).value = "WA Seen";
+    await sheet.saveUpdatedCells();
+  }
+
+  // Has progress header but missing "Email Seen" (col P) → append it
+  if (String(a1 || "").trim() === "User ID" && existingHeaders[5] === "Stage" && existingHeaders[15] !== "Email Seen") {
+    console.log(`   ↳ ${tabName}: adding "Email Seen" column`);
+    sheet.getCell(0, 15).value = "Email Seen";
     await sheet.saveUpdatedCells();
   }
 
@@ -207,6 +223,8 @@ async function syncCourseTabs(loadSheet) {
         "db",        // Added By
         "0",         // Sent Today
         "0",         // Email Sent
+        "",          // WA Seen
+        "",          // Email Seen
       ]);
       existingByTab[tab].add(phone);
       console.log(`   ➕ ${tab}: new DB lead ${raw[1] || phone}`);
@@ -238,6 +256,8 @@ async function syncCourseTabs(loadSheet) {
         "manual",
         "0",         // Sent Today
         "0",         // Email Sent
+        "",          // WA Seen
+        "",          // Email Seen
       ]);
       existingByTab[tab].add(phone);
       console.log(`   ➕ ${tab}: new manual lead ${name || phone}`);

@@ -16,19 +16,19 @@ const APPLY_URL = `${WEBSITE_BASE_URL}/apply`;
 ================================================================ */
 function buildAdmissionFooter(phone = "", isGroup = false) {
   if (isGroup) {
-    return `\n\n────────────────────────────\n📞 *Admissions Helpline:* ${HELPLINE_PHONE} | 📝 *Apply:* ${APPLY_URL}`;
+    return `\n\n────────────────────────────\n*Admissions Helpline:* ${HELPLINE_PHONE} | *Apply:* ${APPLY_URL}`;
   }
 
   const cleanPhoneDigits = String(phone || "").replace(/\D/g, "");
   const applyLink = cleanPhoneDigits ? `${APP_BASE_URL}/a/${cleanPhoneDigits}` : APPLY_URL;
 
   return `\n\n────────────────────────────
-💬 *Need personalized career guidance?*
+*Need personalized career guidance?*
 Our admission experts can help you choose the right path.
 
-📞 *Talk to Us:* ${HELPLINE_PHONE}
-👥 *Join WhatsApp Group:* ${WHATSAPP_GROUP_URL}
-📝 *Apply Now:* ${applyLink}`;
+*Talk to Us:* ${HELPLINE_PHONE}
+*Join WhatsApp Group:* ${WHATSAPP_GROUP_URL}
+*Apply Now:* ${applyLink}`;
 }
 
 /* ================================================================

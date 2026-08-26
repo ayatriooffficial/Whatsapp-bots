@@ -96,9 +96,10 @@ async function sendBulk() {
 
   let poster = null;
   try {
-    poster = MessageMedia.fromFilePath("./poster.jpeg");
+    const posterPath = pickPoster();
+    if (posterPath) poster = MessageMedia.fromFilePath(posterPath);
   } catch (_) {
-    console.log("⚠️ poster.jpeg missing — text only mode");
+    console.log("⚠️ no poster image found — text only mode");
   }
 
   const leads = await getNewLeads();

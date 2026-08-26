@@ -14,11 +14,15 @@ async function checkServerRunning() {
   }
 }
 
-async function triggerViaServer({ targetPhone, targetCourse, delaySec, candidateName, approvedOnly }) {
+async function triggerViaServer({ targetPhone, targetCourse, delaySec, candidateName, approvedOnly, day, slot }) {
   console.log(`🌐 Connected to running WhatsApp Bot server at ${SERVER_URL}`);
   console.log(`🚀 Dispatching sandbox campaign request...`);
 
-  const url = `${SERVER_URL}/sandbox/run?phone=${targetPhone}&course=${targetCourse}&delay=${delaySec}&name=${encodeURIComponent(candidateName)}${approvedOnly ? "&approvedOnly=true" : ""}`;
+  let url = `${SERVER_URL}/sandbox/run?phone=${targetPhone}&course=${targetCourse}&delay=${delaySec}&name=${encodeURIComponent(candidateName)}`;
+  if (approvedOnly) url += `&approvedOnly=true`;
+  if (day) url += `&day=${day}`;
+  if (slot) url += `&slot=${slot}`;
+
   const res = await fetch(url);
   const data = await res.json();
 
@@ -39,6 +43,8 @@ async function main() {
   let delaySec = Number(process.env.SANDBOX_FAST_DELAY_SEC || 8);
   let candidateName = process.env.SANDBOX_NAME || "Candidate";
   let approvedOnly = false;
+  let targetDay = null;
+  let targetSlot = null;
 
   const positional = [];
 
@@ -51,6 +57,10 @@ async function main() {
       delaySec = Number(arg.split("=")[1].trim());
     } else if (arg.startsWith("--name=")) {
       candidateName = arg.split("=")[1].trim();
+    } else if (arg.startsWith("--day=")) {
+      targetDay = Number(arg.split("=")[1].trim());
+    } else if (arg.startsWith("--slot=")) {
+      targetSlot = Number(arg.split("=")[1].trim());
     } else if (arg === "--approvedOnly" || arg === "--approved" || arg === "--published") {
       approvedOnly = true;
     } else if (!arg.startsWith("--")) {
@@ -76,15 +86,17 @@ async function main() {
   console.log(`🚀 CLI WHATSAPP SANDBOX CAMPAIGN TRIGGER`);
   console.log(`📱 Target Phone : +${targetPhone}`);
   console.log(`🎓 Course       : ${targetCourse}`);
+  if (targetDay) console.log(`📅 Target Day   : Day ${targetDay}`);
+  if (targetSlot) console.log(`⏱️ Target Slot  : Slot ${targetSlot}`);
   console.log(`⏱️ Fast Delay   : ${delaySec}s between messages`);
   console.log(`👤 Student Name : ${candidateName}`);
-  console.log(`🎯 Mode         : ${approvedOnly ? "Approved/Published Campaigns Only" : "Full Pure AI Drip Sequence"}`);
+  console.log(`🎯 Mode         : ${approvedOnly ? "Approved/Published Campaigns Only" : "Pure AI Drip Sequence"}`);
   console.log(`======================================================\n`);
 
   // 1. If server is already running, trigger through the authenticated bot server
   const isServerUp = await checkServerRunning();
   if (isServerUp) {
-    await triggerViaServer({ targetPhone, targetCourse, delaySec, candidateName, approvedOnly });
+    await triggerViaServer({ targetPhone, targetCourse, delaySec, candidateName, approvedOnly, day: targetDay, slot: targetSlot });
     process.exit(0);
   }
 
@@ -121,7 +133,9 @@ async function main() {
         course: targetCourse,
         delaySec,
         name: candidateName,
-        approvedOnly
+        approvedOnly,
+        day: targetDay,
+        slot: targetSlot
       });
 
       console.log("\n======================================================");
