@@ -354,6 +354,83 @@ async function updateLeadProgress(lead, updates) {
 }
 
 /* =========================================================
+   TEST LEADS TAB — universal bulk-test recipients (email + WhatsApp)
+   Headers: Name | Email | Phone | Course | Channel | Status |
+            WA Sent | Email Sent | Last Sent At | Last Result
+   Channel: EMAIL | WHATSAPP | BOTH
+========================================================= */
+
+const TEST_LEADS_COL = {
+  NAME: 0, EMAIL: 1, PHONE: 2, COURSE: 3, CHANNEL: 4,
+  STATUS: 5, WA_SENT: 6, EMAIL_SENT: 7, LAST_SENT_AT: 8, LAST_RESULT: 9,
+};
+const TEST_LEADS_HEADERS = [
+  "Name", "Email", "Phone", "Course", "Channel",
+  "Status", "WA Sent", "Email Sent", "Last Sent At", "Last Result",
+];
+
+async function loadTestLeadsTab() {
+  const sheet = await loadSheet("Test Leads");
+  const rows = await sheet.getRows();
+  if (rows.length === 0) {
+    // Seed the header row if the tab is brand new
+    await sheet.loadHeaderRow();
+    const headers = sheet.headerValues || [];
+    if (headers.length < TEST_LEADS_HEADERS.length) {
+      await sheet.setHeaderRow(TEST_LEADS_HEADERS);
+    }
+  }
+  return sheet;
+}
+
+async function getTestLeads({ channel = "", course = "" } = {}) {
+  const sheet = await loadTestLeadsTab();
+  const rows = await sheet.getRows();
+  const want = String(channel || "").toUpperCase().trim();
+  const courseFilter = String(course || "").toUpperCase().trim();
+
+  return rows
+    .map((row) => {
+      const raw = row._rawData || [];
+      return {
+        row,
+        name: String(raw[TEST_LEADS_COL.NAME] ?? "").trim(),
+        email: String(raw[TEST_LEADS_COL.EMAIL] ?? "").toLowerCase().trim(),
+        phone: String(raw[TEST_LEADS_COL.PHONE] ?? "").trim(),
+        course: String(raw[TEST_LEADS_COL.COURSE] ?? "").toUpperCase().trim(),
+        channel: String(raw[TEST_LEADS_COL.CHANNEL] ?? "").toUpperCase().trim(),
+        status: String(raw[TEST_LEADS_COL.STATUS] ?? "").toLowerCase().trim(),
+        waSent: String(raw[TEST_LEADS_COL.WA_SENT] ?? "").trim(),
+        emailSent: String(raw[TEST_LEADS_COL.EMAIL_SENT] ?? "").trim(),
+        lastSentAt: String(raw[TEST_LEADS_COL.LAST_SENT_AT] ?? "").trim(),
+        lastResult: String(raw[TEST_LEADS_COL.LAST_RESULT] ?? "").trim(),
+      };
+    })
+    .filter((l) => {
+      if (!l.email && !l.phone) return false;
+      if (l.status === "done") return false;
+      if (want && l.channel !== want && l.channel !== "BOTH") return false;
+      if (courseFilter && l.course !== courseFilter && l.course !== "ALL") return false;
+      return true;
+    });
+}
+
+async function updateTestLeadStatus(lead, updates) {
+  try {
+    if (!lead?.row) return;
+    const raw = lead.row._rawData;
+    if (updates.status !== undefined) raw[TEST_LEADS_COL.STATUS] = updates.status;
+    if (updates.waSent !== undefined) raw[TEST_LEADS_COL.WA_SENT] = String(updates.waSent);
+    if (updates.emailSent !== undefined) raw[TEST_LEADS_COL.EMAIL_SENT] = String(updates.emailSent);
+    if (updates.lastSentAt !== undefined) raw[TEST_LEADS_COL.LAST_SENT_AT] = String(updates.lastSentAt);
+    if (updates.lastResult !== undefined) raw[TEST_LEADS_COL.LAST_RESULT] = String(updates.lastResult);
+    await lead.row.save();
+  } catch (err) {
+    console.log("updateTestLeadStatus error:", err.message);
+  }
+}
+
+/* =========================================================
    UPDATE SCORE — write engagement score back to cookie_import
 ========================================================= */
 
@@ -426,6 +503,11 @@ module.exports = {
   updateScore,
   addNewLead,
   getViewerScore,
+  loadTestLeadsTab,
+  getTestLeads,
+  updateTestLeadStatus,
+  TEST_LEADS_COL,
+  TEST_LEADS_HEADERS,
   COL,
   cleanPhone,
 };

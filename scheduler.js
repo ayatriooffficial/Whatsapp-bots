@@ -87,6 +87,10 @@ function resetDailyCounters() {
 
 async function sendBulk() {
   if (isSendingReminders) return;
+  if (process.env.TEST_PHASE === "true") {
+    // In TEST_PHASE, the production drip is paused — bulk test sends run manually.
+    return;
+  }
   isSendingReminders = true;
   resetDailyCounters();
 

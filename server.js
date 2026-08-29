@@ -240,6 +240,41 @@ app.get("/sandbox/status", (req, res) => {
   });
 });
 
+/* ---------------- BULK TEST RUNNER ---------------- */
+
+const { runBulkWhatsAppTest, isBulkRunning } = require("./services/bulkTestRunner");
+
+app.get("/bulk/status", (req, res) => {
+  res.json({
+    success: true,
+    running: isBulkRunning(),
+    testPhase: process.env.TEST_PHASE === "true",
+    maxPerRun: Number(process.env.BULK_WA_MAX_PER_RUN || 5),
+  });
+});
+
+app.get("/bulk/run", async (req, res) => {
+  const course = String(req.query.course || "").toUpperCase();
+  const delaySec = Number(req.query.delay || process.env.BULK_WA_DELAY_SEC || 60);
+  const max = Number(req.query.max || process.env.BULK_WA_MAX_PER_RUN || 5);
+  const once = req.query.once === "true";
+  const day = req.query.day ? Number(req.query.day) : undefined;
+  const slot = req.query.slot ? Number(req.query.slot) : undefined;
+
+  if (isBulkRunning()) {
+    return res.status(429).json({ success: false, message: "Bulk WhatsApp test is already running." });
+  }
+
+  res.json({
+    success: true,
+    message: `Bulk WhatsApp test started (course=${course || "ALL"}, delay=${delaySec}s, max=${max}${once ? ", once" : ""}). Check terminal for progress.`,
+  });
+
+  runBulkWhatsAppTest({ course, delaySec, max, once, day, slot }).catch((err) => {
+    console.error("Bulk WhatsApp run error:", err.message);
+  });
+});
+
 app.get("/sandbox/run", async (req, res) => {
   const phone = req.query.phone || process.env.SANDBOX_PHONE;
   const course = req.query.course || process.env.SANDBOX_COURSE || "ALL";
