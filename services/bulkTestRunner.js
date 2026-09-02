@@ -28,6 +28,7 @@ const {
 } = require("./sheetService");
 const { resolveSlotTemplate, invalidateCache } = require("./messageTemplates");
 const { pickPoster } = require("./posterPicker");
+const { wrapWaUrls } = require("./waClickTracker");
 
 let isBulkRunning = false;
 
@@ -177,7 +178,7 @@ async function runBulkWhatsAppTest(options = {}) {
             console.log("Template resolve error:", err.message);
           }
 
-          const message = template?.content || null;
+          let message = template?.content || null;
           if (!message || message.trim().length < 20) {
             // NO FALLBACK — same gate as the production scheduler
             console.log(`⏭️  ${course} day${day} slot${slot}: no approved message — skipping (no fallback)`);
@@ -185,6 +186,7 @@ async function runBulkWhatsAppTest(options = {}) {
             report.push({ recipient: phoneDigits, name, course, day, slot, preview: "", status: "skipped", error: "NO_APPROVED_CONTENT", sentAt: new Date().toISOString() });
             continue;
           }
+          message = wrapWaUrls(message, phoneDigits);
 
           let recipient = `${phoneDigits}@c.us`;
           try {

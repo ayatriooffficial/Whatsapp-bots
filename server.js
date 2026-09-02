@@ -614,6 +614,17 @@ async function startServer() {
       console.log("⚡ Re-auth detected — skipping re-init");
       return;
     }
+    const allowed = String(process.env.ALLOWED_PHONE || "").replace(/\D/g, "");
+    if (allowed) {
+      const wid = client.info?.wid?._serialized || client.info?.wid?.user || "";
+      const linked = String(wid).split("@")[0].replace(/\D/g, "");
+      if (linked && linked !== allowed && !linked.endsWith(allowed.slice(-10)) && !allowed.endsWith(linked.slice(-10))) {
+        console.error(`🛑 Linked number +${linked} != ALLOWED_PHONE +${allowed} — unlinking and exiting.`);
+        try { await client.logout(); } catch (_) {}
+        process.exit(1);
+      }
+      console.log(`🔒 Phone guard passed — linked +${linked} matches ALLOWED_PHONE`);
+    }
     runtimeStarted = true;
 
     try {
@@ -668,13 +679,18 @@ startServer();
 /* ─── BOOT-TIME SHEET SYNC (no QR needed) ───
    Fill CBA/DGM/TBM from cookie_import immediately on boot + every 15 min,
    even if the WhatsApp QR hasn't been scanned yet (the email bot and
-   course tabs depend on this). */
+   course tabs depend on this). Also migrates Test Leads headers (WA Seen / WA Clicked / Email Seen). */
 (function startBootSplitSync() {
   const runSync = () => {
     syncCourseTabs(require("./services/sheetService").loadSheet).catch(
       (err) => console.log("Boot split sync error:", err.message)
     );
   };
+  const migrateTestLeads = () => {
+    const { loadTestLeadsTab } = require("./services/sheetService");
+    loadTestLeadsTab().catch((err) => console.log("Boot Test Leads migrate note:", err.message));
+  };
   runSync();
+  migrateTestLeads();
   setInterval(runSync, SPLIT_SYNC_INTERVAL_MS);
 })();

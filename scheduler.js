@@ -13,6 +13,7 @@ const {
 } = require("./services/messageTemplates");
 const { COURSE_TABS } = require("./services/courseCategories");
 const { pickPoster } = require("./services/posterPicker");
+const { wrapWaUrls } = require("./services/waClickTracker");
 
 let reminderStarted = false;
 let isSendingReminders = false;
@@ -212,6 +213,7 @@ async function sendBulk() {
           console.log(`⏭️ ${lead.name || lead.phone}: approved message too short for day${day} slot${slot} — skipping (no fallback)`);
           continue;
         }
+        message = wrapWaUrls(message, phoneDigits);
 
         /* ---------------- SEND ---------------- */
         try {

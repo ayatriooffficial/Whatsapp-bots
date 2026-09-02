@@ -280,6 +280,7 @@ const COURSE_COL = {
   EMAIL_SENT: 13,
   WA_SEEN: 14,
   EMAIL_SEEN: 15,
+  WA_CLICKED: 16,
 };
 
 function isDividerRow(row) {
@@ -345,6 +346,7 @@ async function updateLeadProgress(lead, updates) {
     if (updates.emailSent !== undefined) raw[COURSE_COL.EMAIL_SENT] = String(updates.emailSent);
     if (updates.waSeen !== undefined) raw[COURSE_COL.WA_SEEN] = String(updates.waSeen);
     if (updates.emailSeen !== undefined) raw[COURSE_COL.EMAIL_SEEN] = String(updates.emailSeen);
+    if (updates.waClicked !== undefined) raw[COURSE_COL.WA_CLICKED] = String(updates.waClicked);
     if (updates.lastSentAt !== undefined) raw[COURSE_COL.LAST_SENT_AT] = updates.lastSentAt;
     if (updates.sentToday !== undefined) raw[COURSE_COL.SENT_TODAY] = String(updates.sentToday);
     await lead.row.save();
@@ -363,21 +365,31 @@ async function updateLeadProgress(lead, updates) {
 const TEST_LEADS_COL = {
   NAME: 0, EMAIL: 1, PHONE: 2, COURSE: 3, CHANNEL: 4,
   STATUS: 5, WA_SENT: 6, EMAIL_SENT: 7, LAST_SENT_AT: 8, LAST_RESULT: 9,
+  WA_SEEN: 10, WA_CLICKED: 11, EMAIL_SEEN: 12,
 };
 const TEST_LEADS_HEADERS = [
   "Name", "Email", "Phone", "Course", "Channel",
   "Status", "WA Sent", "Email Sent", "Last Sent At", "Last Result",
+  "WA Seen", "WA Clicked", "Email Seen",
 ];
 
 async function loadTestLeadsTab() {
   const sheet = await loadSheet("Test Leads");
-  const rows = await sheet.getRows();
-  if (rows.length === 0) {
-    // Seed the header row if the tab is brand new
-    await sheet.loadHeaderRow();
-    const headers = sheet.headerValues || [];
-    if (headers.length < TEST_LEADS_HEADERS.length) {
+  await sheet.loadHeaderRow().catch(() => {});
+  const headersRaw = sheet.headerValues || [];
+  const headers = headersRaw.filter((h) => String(h || "").trim() !== "");
+  if (headers.length < TEST_LEADS_HEADERS.length) {
+    const missing = TEST_LEADS_HEADERS.slice(headers.length);
+    if (headers.length > 0 && headers.length < TEST_LEADS_HEADERS.length) {
+      await sheet.loadCells(`A1:${String.fromCharCode(64 + TEST_LEADS_HEADERS.length)}1`);
+      for (let i = headers.length; i < TEST_LEADS_HEADERS.length; i++) {
+        sheet.getCell(0, i).value = TEST_LEADS_HEADERS[i];
+      }
+      await sheet.saveUpdatedCells();
+      console.log(`   ↳ Test Leads: added ${missing.join(", ")} columns`);
+    } else {
       await sheet.setHeaderRow(TEST_LEADS_HEADERS);
+      console.log(`   ↳ Test Leads: added ${missing.join(", ")} columns`);
     }
   }
   return sheet;
@@ -394,16 +406,19 @@ async function getTestLeads({ channel = "", course = "" } = {}) {
       const raw = row._rawData || [];
       return {
         row,
-        name: String(raw[TEST_LEADS_COL.NAME] ?? "").trim(),
-        email: String(raw[TEST_LEADS_COL.EMAIL] ?? "").toLowerCase().trim(),
-        phone: String(raw[TEST_LEADS_COL.PHONE] ?? "").trim(),
-        course: String(raw[TEST_LEADS_COL.COURSE] ?? "").toUpperCase().trim(),
-        channel: String(raw[TEST_LEADS_COL.CHANNEL] ?? "").toUpperCase().trim(),
-        status: String(raw[TEST_LEADS_COL.STATUS] ?? "").toLowerCase().trim(),
-        waSent: String(raw[TEST_LEADS_COL.WA_SENT] ?? "").trim(),
-        emailSent: String(raw[TEST_LEADS_COL.EMAIL_SENT] ?? "").trim(),
-        lastSentAt: String(raw[TEST_LEADS_COL.LAST_SENT_AT] ?? "").trim(),
-        lastResult: String(raw[TEST_LEADS_COL.LAST_RESULT] ?? "").trim(),
+        name: String(raw[TEST_LEADS_COL.NAME] || "").trim(),
+        email: String(raw[TEST_LEADS_COL.EMAIL] || "").toLowerCase().trim(),
+        phone: String(raw[TEST_LEADS_COL.PHONE] || "").trim(),
+        course: String(raw[TEST_LEADS_COL.COURSE] || "").toUpperCase().trim(),
+        channel: String(raw[TEST_LEADS_COL.CHANNEL] || "").toUpperCase().trim(),
+        status: String(raw[TEST_LEADS_COL.STATUS] || "").toLowerCase().trim(),
+        waSent: String(raw[TEST_LEADS_COL.WA_SENT] || "").trim(),
+        emailSent: String(raw[TEST_LEADS_COL.EMAIL_SENT] || "").trim(),
+        lastSentAt: String(raw[TEST_LEADS_COL.LAST_SENT_AT] || "").trim(),
+        lastResult: String(raw[TEST_LEADS_COL.LAST_RESULT] || "").trim(),
+        waSeen: String(raw[TEST_LEADS_COL.WA_SEEN] || "").trim(),
+        waClicked: String(raw[TEST_LEADS_COL.WA_CLICKED] || "").trim(),
+        emailSeen: String(raw[TEST_LEADS_COL.EMAIL_SEEN] || "").trim(),
       };
     })
     .filter((l) => {
@@ -424,6 +439,9 @@ async function updateTestLeadStatus(lead, updates) {
     if (updates.emailSent !== undefined) raw[TEST_LEADS_COL.EMAIL_SENT] = String(updates.emailSent);
     if (updates.lastSentAt !== undefined) raw[TEST_LEADS_COL.LAST_SENT_AT] = String(updates.lastSentAt);
     if (updates.lastResult !== undefined) raw[TEST_LEADS_COL.LAST_RESULT] = String(updates.lastResult);
+    if (updates.waSeen !== undefined) raw[TEST_LEADS_COL.WA_SEEN] = String(updates.waSeen);
+    if (updates.waClicked !== undefined) raw[TEST_LEADS_COL.WA_CLICKED] = String(updates.waClicked);
+    if (updates.emailSeen !== undefined) raw[TEST_LEADS_COL.EMAIL_SEEN] = String(updates.emailSeen);
     await lead.row.save();
   } catch (err) {
     console.log("updateTestLeadStatus error:", err.message);

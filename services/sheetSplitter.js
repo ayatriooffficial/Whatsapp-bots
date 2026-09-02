@@ -35,6 +35,7 @@ const HEADERS = [
   "Email Sent",
   "WA Seen",
   "Email Seen",
+  "WA Clicked",
 ];
 
 function digitsOnly(value) {
@@ -74,10 +75,10 @@ function rowToLead(row) {
  */
 async function ensureCourseTab(loadSheet, tabName) {
   const sheet = await loadSheet(tabName);
-  await sheet.loadCells("A1:N1");
+  await sheet.loadCells("A1:Q1");
   const a1 = sheet.getCell(0, 0).value;
   const existingHeaders = [];
-  for (let c = 0; c < 14; c++) existingHeaders.push(String(sheet.getCell(0, c).value || ""));
+  for (let c = 0; c < HEADERS.length; c++) existingHeaders.push(String(sheet.getCell(0, c).value || ""));
 
   // Already has progress header but missing "Sent Today" (col M) → append it
   if (String(a1 || "").trim() === "User ID" && existingHeaders[5] === "Stage" && existingHeaders[12] !== "Sent Today") {
@@ -104,6 +105,13 @@ async function ensureCourseTab(loadSheet, tabName) {
   if (String(a1 || "").trim() === "User ID" && existingHeaders[5] === "Stage" && existingHeaders[15] !== "Email Seen") {
     console.log(`   ↳ ${tabName}: adding "Email Seen" column`);
     sheet.getCell(0, 15).value = "Email Seen";
+    await sheet.saveUpdatedCells();
+  }
+
+  // Has progress header but missing "WA Clicked" (col Q) → append it
+  if (String(a1 || "").trim() === "User ID" && existingHeaders[5] === "Stage" && existingHeaders[16] !== "WA Clicked") {
+    console.log(`   ↳ ${tabName}: adding "WA Clicked" column`);
+    sheet.getCell(0, 16).value = "WA Clicked";
     await sheet.saveUpdatedCells();
   }
 
@@ -225,6 +233,7 @@ async function syncCourseTabs(loadSheet) {
         "0",         // Email Sent
         "",          // WA Seen
         "",          // Email Seen
+        "",          // WA Clicked
       ]);
       existingByTab[tab].add(phone);
       console.log(`   ➕ ${tab}: new DB lead ${raw[1] || phone}`);
@@ -258,6 +267,7 @@ async function syncCourseTabs(loadSheet) {
         "0",         // Email Sent
         "",          // WA Seen
         "",          // Email Seen
+        "",          // WA Clicked
       ]);
       existingByTab[tab].add(phone);
       console.log(`   ➕ ${tab}: new manual lead ${name || phone}`);

@@ -4,6 +4,7 @@ const { generateDynamicWhatsAppMessage } = require("./contentAgent");
 const { getCourseLeads, updateLeadProgress, loadSheet } = require("./sheetService");
 const { resolveSlotTemplate, invalidateCache } = require("./messageTemplates");
 const { pickPoster } = require("./posterPicker");
+const { wrapWaUrls } = require("./waClickTracker");
 
 let isSandboxRunning = false;
 
@@ -131,13 +132,14 @@ async function runSandboxStageCampaign(options = {}) {
         console.log(`📤 [${overallIndex}/${totalMessages} | ${course}] Generating & Sending ${stage.label}...`);
 
         try {
-          const message = await buildWhatsAppMessage({
+          let message = await buildWhatsAppMessage({
             name: candidateName,
             course,
             day: stage.day,
             slot: stage.slot,
             approvedOnly: Boolean(options.approvedOnly),
           });
+          message = wrapWaUrls(message, phoneDigits);
 
           if (poster) {
             await client.sendMessage(recipient, poster, { caption: message });
