@@ -30,6 +30,12 @@ const CONFIG = {
   maxMessagesPerDay: Number(process.env.MAX_MESSAGES_PER_DAY || 2),
   totalSessions: Number(process.env.TOTAL_SESSIONS || 6), // 3 days x 2 slots
   globalDailyCap: Number(process.env.MAX_DAILY_MESSAGES || 150),
+  // Per-slot limit: guarantees 50% budget for Slot 1 and 50% for Slot 2
+  // so Slot 1 morning run cannot exhaust the entire daily limit.
+  slotCap: Number(
+    process.env.MAX_MESSAGES_PER_SLOT ||
+      Math.floor(Number(process.env.MAX_DAILY_MESSAGES || 150) / 2)
+  ),
   minDelayMs: Number(process.env.SEND_INTERVAL_MS || 60000),
   jitterMs: Number(process.env.SEND_INTERVAL_JITTER_MS || 15000),
 };
@@ -69,6 +75,7 @@ function randomDelay() {
 
 let globalSentToday = 0;
 let lastGlobalResetDay = "";
+const slotSentToday = { 1: 0, 2: 0 };
 
 // Per-lead messages sent today (catch-up guard: max 2/day even when catching up)
 const sentTodayByLead = new Map(); // key: phone → count
@@ -78,6 +85,8 @@ function resetDailyCounters() {
   const today = new Date().toDateString();
   if (today !== lastGlobalResetDay) {
     globalSentToday = 0;
+    slotSentToday[1] = 0;
+    slotSentToday[2] = 0;
     lastGlobalResetDay = today;
   }
   if (today !== sentTodayDay) {
@@ -132,6 +141,24 @@ async function sendBulk() {
         leads = [];
       }
 
+      // Prioritize in-flight leads:
+      // 1) Leads needing Slot 2 who already got Slot 1 today (highest priority to complete their day)
+      // 2) Leads already on Day 2 or Day 3 (finish in-flight 3-day journey)
+      // 3) Brand new leads (Day 1 Slot 1)
+      leads.sort((a, b) => {
+        const sentA = Number(a.messagesSent || 0);
+        const sentB = Number(b.messagesSent || 0);
+        const slotA = (sentA % 2) + 1;
+        const slotB = (sentB % 2) + 1;
+
+        // Give priority to Slot 2 (evening in-flight) over Slot 1
+        if (slotA === 2 && slotB !== 2) return -1;
+        if (slotB === 2 && slotA !== 2) return 1;
+
+        // For same slot, higher day/messagesSent comes first to finish existing journeys
+        return sentB - sentA;
+      });
+
       for (const lead of leads) {
         if (globalSentToday >= CONFIG.globalDailyCap) {
           console.log(`⏹️  Global daily cap (${CONFIG.globalDailyCap}) reached — stopping.`);
@@ -149,6 +176,12 @@ async function sendBulk() {
         // Determine current day (1-3) + slot (1-2) from messagesSent
         const day = Math.floor(messagesSent / 2) + 1; // 0-1→1, 2-3→2, 4-5→3
         const slot = (messagesSent % 2) + 1;          // 0,2,4→1 ; 1,3,5→2
+
+        // Per-slot cap guard: prevent morning slot from consuming evening slot budget
+        if ((slotSentToday[slot] || 0) >= CONFIG.slotCap) {
+          console.log(`   ⏳ Slot ${slot} cap (${CONFIG.slotCap}) reached for today — holding remaining leads for next window.`);
+          continue;
+        }
 
         // Resolve template (message + time) for this slot
         let template = null;
@@ -250,7 +283,8 @@ async function sendBulk() {
           sentTodayByLead.set(phoneKey, sentTodayValue);
 
           globalSentToday += 1;
-          console.log(`   📈 ${lead.name || lead.phone}: ${newCount}/${CONFIG.totalSessions} | ${globalSentToday}/${CONFIG.globalDailyCap} today`);
+          slotSentToday[slot] = (slotSentToday[slot] || 0) + 1;
+          console.log(`   📈 ${lead.name || lead.phone}: ${newCount}/${CONFIG.totalSessions} | Slot ${slot}: ${slotSentToday[slot]}/${CONFIG.slotCap} | Total: ${globalSentToday}/${CONFIG.globalDailyCap} today`);
 
           const wait = randomDelay();
           console.log(`   ⏳ waiting ${Math.round(wait / 1000)}s`);
